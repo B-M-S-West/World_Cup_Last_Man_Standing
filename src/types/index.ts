@@ -1,0 +1,126 @@
+// Describes a team in the tournament
+export type Team = {
+  id: string           // 3-letter FIFA code: 'ENG', 'BRA', 'ARG'
+  api_id: number | null
+  name: string         // 'England', 'Brazil'
+  group_id: string | null  // 'A' through 'L', null for knockout-only teams
+  crest_url: string | null // Badge image URL from football-data.org
+}
+
+// Describes a single match
+export type Fixture = {
+  id: string
+  api_id: number
+  home_team_id: string
+  away_team_id: string
+  kickoff_time: string  // ISO date string e.g. "2026-06-11T19:00:00Z"
+  stage: FixtureStage
+  group_id: string | null
+  matchday: number | null
+  home_score: number | null  // null until the match is played
+  away_score: number | null
+  status: FixtureStatus
+  // These are "joined" fields — fetched from the teams table in the same query
+  home_team?: Team
+  away_team?: Team
+}
+
+// Every possible stage value that football-data.org can return
+export type FixtureStage =
+  | 'GROUP_STAGE'
+  | 'ROUND_OF_32'
+  | 'ROUND_OF_16'
+  | 'QUARTER_FINALS'
+  | 'SEMI_FINALS'
+  | 'THIRD_PLACE'
+  | 'FINAL'
+
+// Every possible match status from football-data.org
+export type FixtureStatus =
+  | 'SCHEDULED'
+  | 'TIMED'
+  | 'IN_PLAY'
+  | 'PAUSED'
+  | 'FINISHED'
+  | 'SUSPENDED'
+  | 'POSTPONED'
+  | 'CANCELLED'
+  | 'AWARDED'
+
+// A row in the group standings table
+export type StandingRow = {
+  id: string
+  group_id: string
+  team_id: string
+  position: number
+  played: number
+  won: number
+  drawn: number
+  lost: number
+  goals_for: number
+  goals_against: number
+  goal_diff: number
+  points: number
+  updated_at: string
+  team?: Team  // joined
+}
+
+// One of your friends playing the game
+export type Player = {
+  id: string        // matches their Supabase auth user ID
+  username: string
+  is_active: boolean  // false = eliminated from LMS
+  is_admin: boolean   // true = you
+}
+
+// A single LMS pick
+export type Pick = {
+  id: string
+  player_id: string
+  fixture_id: string
+  team_id: string
+  round: number      // 1=Group, 2=R32, 3=R16, 4=QF, 5=SF, 6=Final
+  revealed: boolean  // true = visible to all players
+  result: PickResult | null  // null until match finishes
+  created_at: string
+  // Joined fields
+  team?: Team
+  player?: Player
+  fixture?: Fixture
+}
+
+export type PickResult = 'win' | 'draw' | 'loss'
+
+// Maps football-data.org stage names to LMS round numbers
+// Used to know which round number to assign a pick to
+export const STAGE_TO_ROUND: Record<string, number> = {
+  GROUP_STAGE:     1,
+  ROUND_OF_32:    2,
+  ROUND_OF_16:    3,
+  QUARTER_FINALS:  4,
+  SEMI_FINALS:    5,
+  THIRD_PLACE:    5,
+  FINAL:          6,
+}
+
+// Human-readable labels for display in the UI
+export const STAGE_LABELS: Record<string, string> = {
+  GROUP_STAGE:     'Group Stage',
+  ROUND_OF_32:    'Round of 32',
+  ROUND_OF_16:    'Round of 16',
+  QUARTER_FINALS:  'Quarter-Finals',
+  SEMI_FINALS:    'Semi-Finals',
+  THIRD_PLACE:    'Third Place Play-off',
+  FINAL:          'Final',
+}
+
+// Ordered list used for filter buttons on the fixtures page
+export const STAGES_IN_ORDER: FixtureStage[] = [
+  'GROUP_STAGE',
+  'ROUND_OF_32',
+  'ROUND_OF_16',
+  'QUARTER_FINALS',
+  'SEMI_FINALS',
+  'THIRD_PLACE',
+  'FINAL',
+]
