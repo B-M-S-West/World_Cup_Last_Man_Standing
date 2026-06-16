@@ -24,3 +24,9 @@ dist-ssr
 *.sw?
 
 .env.local
+
+# TanStack Router auto-generated file
+src/routeTree.gen.ts
+
+# Supabase local development files
+supabase/.temp
