@@ -1,0 +1,14 @@
+[api]
+enabled = true
+
+[auth]
+enabled = true
+
+[functions.sync-fixtures]
+enabled = true
+
+[functions.reveal-picks]
+enabled = true
+
+[functions.process-results]
+enabled = true
