@@ -1,131 +1,59 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import postgres from 'npm:postgres'
 
-// Supabase now provides secret keys as a JSON dictionary
-const secretKeys = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}')
-const serviceRoleKey = Object.values(secretKeys)[0] as string
+const sql = postgres(Deno.env.get('SUPABASE_DB_URL')!, { prepare: false })
 
-const supabase = createClient(
-  Deno.env.get('SUPABASE_URL')!,
-  serviceRoleKey
-)
-
-// Runs every 10 minutes via cron schedule.
-// Finds picks attached to finished fixtures that don't have
-// a result yet, scores them as win/draw/loss, then eliminates
-// any players who drew or lost.
 Deno.serve(async (_req) => {
   console.log('process-results: running at', new Date().toISOString())
 
   try {
-    // Find picks where:
-    //   - result is NULL (not yet processed)
-    //   - the attached fixture is FINISHED with scores
-    const { data: pendingPicks, error: fetchError } = await supabase
-      .from('picks')
-      .select(`
-        id,
-        player_id,
-        team_id,
-        fixture:fixtures!inner (
-          id,
-          status,
-          home_team_id,
-          away_team_id,
-          home_score,
-          away_score
-        )
-      `)
-      .is('result', null)
+    // Find picks with no result attached to finished fixtures
+    const pendingPicks = await sql`
+      SELECT p.id, p.player_id, p.team_id,
+             f.home_team_id, f.away_team_id, f.home_score, f.away_score
+      FROM picks p
+      JOIN fixtures f ON f.id = p.fixture_id
+      WHERE p.result IS NULL
+        AND f.status = 'FINISHED'
+        AND f.home_score IS NOT NULL
+        AND f.away_score IS NOT NULL
+    `
 
-    if (fetchError) {
-      console.error('Error fetching pending picks:', fetchError.message)
-      return new Response(`Error: ${fetchError.message}`, { status: 500 })
-    }
-
-    if (!pendingPicks || pendingPicks.length === 0) {
+    if (pendingPicks.length === 0) {
       console.log('No pending picks to process')
+      await sql.end()
       return new Response('No pending picks', { status: 200 })
     }
 
-    // Filter down to only picks where the fixture is finished with scores
-    const processable = pendingPicks.filter((pick: any) => {
-      const f = pick.fixture
-      return (
-        f.status === 'FINISHED' &&
-        f.home_score !== null &&
-        f.away_score !== null
-      )
-    })
+    const toEliminate: string[] = []
 
-    if (processable.length === 0) {
-      console.log(`Found ${pendingPicks.length} pending picks but no finished fixtures yet`)
-      return new Response('No finished fixtures to process', { status: 200 })
-    }
-
-    console.log(`Processing ${processable.length} picks`)
-
-    const playerIdsToEliminate: string[] = []
-    let processedCount = 0
-
-    for (const pick of processable) {
-      const fixture    = pick.fixture as any
-      const homeScore  = fixture.home_score as number
-      const awayScore  = fixture.away_score as number
-      const isHomePick = pick.team_id === fixture.home_team_id
-
-      // Work out the result from the picked team's perspective
+    for (const pick of pendingPicks) {
+      const isHome = pick.team_id === pick.home_team_id
       let result: 'win' | 'draw' | 'loss'
 
-      if (homeScore === awayScore) {
-        // A draw eliminates in LMS regardless of which team was picked
+      if (pick.home_score === pick.away_score) {
         result = 'draw'
-      } else if (isHomePick) {
-        result = homeScore > awayScore ? 'win' : 'loss'
+      } else if (isHome) {
+        result = pick.home_score > pick.away_score ? 'win' : 'loss'
       } else {
-        result = awayScore > homeScore ? 'win' : 'loss'
+        result = pick.away_score > pick.home_score ? 'win' : 'loss'
       }
 
-      // Save the result on this pick
-      const { error: pickUpdateError } = await supabase
-        .from('picks')
-        .update({ result })
-        .eq('id', pick.id)
+      await sql`UPDATE picks SET result = ${result} WHERE id = ${pick.id}`
 
-      if (pickUpdateError) {
-        console.error(`Error updating pick ${pick.id}:`, pickUpdateError.message)
-        continue
-      }
-
-      processedCount++
-      console.log(`Pick ${pick.id}: ${pick.team_id} → ${result} (${homeScore}–${awayScore})`)
-
-      // Queue elimination for draws and losses
-      if (result !== 'win') {
-        playerIdsToEliminate.push(pick.player_id)
-      }
+      if (result !== 'win') toEliminate.push(pick.player_id)
     }
 
-    // Eliminate all players who lost or drew in one query
-    if (playerIdsToEliminate.length > 0) {
-      const uniqueIds = [...new Set(playerIdsToEliminate)]
-
-      const { error: eliminateError } = await supabase
-        .from('players')
-        .update({ is_active: false })
-        .in('id', uniqueIds)
-
-      if (eliminateError) {
-        console.error('Error eliminating players:', eliminateError.message)
-      } else {
-        console.log(`Eliminated ${uniqueIds.length} player(s)`)
-      }
+    if (toEliminate.length > 0) {
+      const unique = [...new Set(toEliminate)]
+      await sql`UPDATE players SET is_active = false WHERE id = ANY(${unique})`
+      console.log(`Eliminated ${unique.length} players`)
     }
 
-    const summary = `Processed ${processedCount} picks, eliminated ${playerIdsToEliminate.length} player(s)`
-    console.log(summary)
-    return new Response(summary, { status: 200 })
+    await sql.end()
+    return new Response(`Processed ${pendingPicks.length} picks`, { status: 200 })
 
   } catch (err) {
+    await sql.end()
     const message = err instanceof Error ? err.message : String(err)
     console.error('process-results failed:', message)
     return new Response(`Error: ${message}`, { status: 500 })
