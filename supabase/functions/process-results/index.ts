@@ -1,8 +1,12 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+// Supabase now provides secret keys as a JSON dictionary
+const secretKeys = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}')
+const serviceRoleKey = Object.values(secretKeys)[0] as string
+
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  serviceRoleKey
 )
 
 // Runs every 10 minutes via cron schedule.

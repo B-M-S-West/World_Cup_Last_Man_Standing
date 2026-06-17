@@ -7,11 +7,13 @@ const FOOTBALL_API_KEY = Deno.env.get('FOOTBALL_DATA_API_KEY')!
 const COMPETITION_ID   = '2000'  // FIFA World Cup on football-data.org
 const API_BASE         = 'https://api.football-data.org/v4'
 
-// Service role key bypasses RLS — correct for trusted server code.
-// This key never appears in your React frontend.
+// Supabase now provides secret keys as a JSON dictionary
+const secretKeys = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}')
+const serviceRoleKey = Object.values(secretKeys)[0] as string
+
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  serviceRoleKey
 )
 
 // ── Helper: fetch from football-data.org ──────────────────────
