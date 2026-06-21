@@ -54,16 +54,18 @@ function RootLayout() {
   return (
     <>
       {user && (
-        <header>
-          <span className="app-logo">🏆 WC2026 — Last Man Standing</span>
-          <nav>
-            <Link to="/"         activeProps={{ className: 'active' }}>Home</Link>
-            <Link to="/groups"   activeProps={{ className: 'active' }}>Groups</Link>
-            <Link to="/fixtures" activeProps={{ className: 'active' }}>Fixtures</Link>
-            <Link to="/lms"      activeProps={{ className: 'active' }}>LMS</Link>
-            <Link to="/pick"     activeProps={{ className: 'active' }}>My Pick</Link>
-            <button onClick={handleLogout}>Sign Out</button>
-          </nav>
+        <header className="app-header">
+          <div className="app-header-inner">
+            <span className="app-logo">🏆 WC2026 — Last Man Standing</span>
+            <nav className="app-nav">
+              <Link to="/"         activeProps={{ className: 'active' }}>Home</Link>
+              <Link to="/groups"   activeProps={{ className: 'active' }}>Groups</Link>
+              <Link to="/fixtures" activeProps={{ className: 'active' }}>Fixtures</Link>
+              <Link to="/lms"      activeProps={{ className: 'active' }}>LMS</Link>
+              <Link to="/pick"     activeProps={{ className: 'active' }}>My Pick</Link>
+              <button className="btn-logout" onClick={handleLogout}>Sign Out</button>
+            </nav>
+          </div>
         </header>
       )}
       <main>
