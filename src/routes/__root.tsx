@@ -55,7 +55,7 @@ function RootLayout() {
     <>
       {user && (
         <header>
-          <span>🏆 WC2026 Last Man Standing</span>
+          <span className="app-logo">🏆 WC2026 — Last Man Standing</span>
           <nav>
             <Link to="/"         activeProps={{ className: 'active' }}>Home</Link>
             <Link to="/groups"   activeProps={{ className: 'active' }}>Groups</Link>

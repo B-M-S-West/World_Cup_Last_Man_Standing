@@ -81,35 +81,40 @@ button {
 .app-header-inner {
     max-width: 1100px;
     margin: 0 auto;
-    padding: 0 16px;
-    height: 60px;
+    padding: 0 24px;
+    height: 70px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: 24px;
 }
 
 .app-logo {
     font-family: var(--font-display);
-    font-size: 1.2rem;
+    font-size: 1.4rem;
     font-weight: 700;
     color: var(--color-text);
     white-space: nowrap;
+    letter-spacing: 1px;
+    text-transform: uppercase;
 }
 
 .app-nav {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
 }
 
 .app-nav a {
     color: var(--color-muted);
-    font-size: 0.875rem;
-    font-weight: 500;
-    padding: 6px 12px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    padding: 8px 16px;
     border-radius: var(--radius-sm);
     transition: color 0.15s, background 0.15s;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    font-size: 0.75rem;
 }
 
 .app-nav a:hover {
@@ -126,10 +131,13 @@ button {
     background: none;
     border: 1px solid var(--color-border);
     color: var(--color-muted);
-    font-size: 0.8rem;
-    padding: 5px 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    padding: 8px 16px;
     border-radius: var(--radius-sm);
-    margin-left: 8px;
+    margin-left: 12px;
     transition: all 0.15s;
 }
 
