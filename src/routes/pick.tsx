@@ -13,7 +13,6 @@ export const Route = createFileRoute('/pick')({
   component: PickPage,
 })
 
-// Returns all fixtures for the current round and the round number
 function getCurrentRoundInfo(fixtures: Fixture[], myPicks: Pick[]): {
   fixtures: Fixture[]
   round: number
@@ -65,22 +64,13 @@ function PickPage() {
     }
   }, [existingPick, changingPick])
 
-  // Teams used in previous rounds only (not the current round pick)
+  // Teams used in previous rounds
   const usedInPreviousRounds = new Set(
     myPicks
       .filter(p => p.round !== currentRound)
       .map(p => p.team_id)
   )
 
-  // All unique teams playing in this matchday, excluding previously used teams
-  const availableTeams = roundFixtures
-    .flatMap(f => [f.home_team, f.away_team])
-    .filter((team): team is NonNullable<typeof team> => !!team)
-    .filter((team, index, self) => self.findIndex(t => t.id === team.id) === index)
-    .filter(team => !usedInPreviousRounds.has(team.id))
-    .sort((a, b) => a.name.localeCompare(b.name))
-
-  // Find which fixture a team is playing in — needed when submitting
   const getFixtureForTeam = (teamId: string): Fixture | null =>
     roundFixtures.find(f =>
       f.home_team_id === teamId || f.away_team_id === teamId
@@ -90,7 +80,6 @@ function PickPage() {
     if (!selectedTeamId || currentRound === null) return
     const fixture = getFixtureForTeam(selectedTeamId)
     if (!fixture) return
-
     await submitPick.mutateAsync({
       fixtureId: fixture.id,
       teamId:    selectedTeamId,
@@ -100,12 +89,10 @@ function PickPage() {
     setSelectedTeamId(null)
   }
 
-  // ── Loading ───────────────────────────────────────────────
   if (picksLoading || fixturesLoading) {
     return <div className="loading">Loading...</div>
   }
 
-  // ── No upcoming fixtures ──────────────────────────────────
   if (roundFixtures.length === 0) {
     return (
       <div className="page-container">
@@ -117,13 +104,20 @@ function PickPage() {
     )
   }
 
-  // ── Main render ───────────────────────────────────────────
+  // Group fixtures by date for display
+  const byDate: Record<string, Fixture[]> = {}
+  for (const f of roundFixtures) {
+    const date = f.kickoff_time.slice(0, 10)
+    if (!byDate[date]) byDate[date] = []
+    byDate[date].push(f)
+  }
+
   return (
     <div className="page-container pick-page">
       <h1>Round {currentRound} — {STAGE_LABELS['GROUP_STAGE']}</h1>
 
       <p className="fixture-info">
-        Pick any team playing in matchday {currentRound}.
+        Pick any team from matchday {currentRound}.
         First game kicks off{' '}
         <strong>
           {kickoffTime
@@ -132,7 +126,7 @@ function PickPage() {
         </strong>
       </p>
 
-      {/* Already picked this round and not changing */}
+      {/* Already picked and not changing */}
       {existingPick && !changingPick && (
         <div>
           <div className="pick-sealed card">
@@ -177,7 +171,7 @@ function PickPage() {
                 <span className="lock-icon">🔒</span>
                 <strong>Pick submitted and sealed</strong>
                 <p style={{ color: 'var(--color-muted)', marginTop: '8px' }}>
-                  Your pick will be revealed to other players 1 hour before kickoff.
+                  Your pick will be revealed 1 hour before kickoff.
                 </p>
               </>
             )}
@@ -195,82 +189,232 @@ function PickPage() {
         </div>
       )}
 
-      {/* Team selector — for new picks or changing existing pick */}
+      {/* Fixture selector */}
       {(!existingPick || changingPick) && (
         <div>
           {isEliminated ? (
-            <div className="msg-info" style={{ marginBottom: '16px' }}>
+            <div className="msg-info" style={{ marginBottom: '20px' }}>
               ⚽ You've been eliminated but you can still pick for fun —
               your pick won't affect the competition.
             </div>
           ) : (
-            <div className="msg-info" style={{ marginBottom: '16px' }}>
+            <div className="msg-info" style={{ marginBottom: '20px' }}>
               🔒 Your pick will be hidden from other players until 1 hour before kickoff.
+              Click a team to select them.
             </div>
           )}
 
-          {availableTeams.length === 0 ? (
-            <div className="msg-error">
-              <strong>No teams available.</strong><br />
-              You've already used all the teams playing in this round.
-            </div>
-          ) : (
-            <>
-              <div className="team-options" style={{
-                gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))'
+          {/* Fixtures grouped by date */}
+          {Object.entries(byDate).map(([date, dayFixtures]) => (
+            <div key={date} style={{ marginBottom: '24px' }}>
+              <h3 style={{
+                color: 'var(--color-muted)',
+                fontSize: '0.8rem',
+                textTransform: 'uppercase',
+                letterSpacing: '1px',
+                marginBottom: '10px',
+                paddingBottom: '6px',
+                borderBottom: '1px solid var(--color-border)',
               }}>
-                {availableTeams.map(team => (
-                  <button
-                    key={team.id}
-                    className={`team-btn ${selectedTeamId === team.id ? 'selected' : ''}`}
-                    onClick={() => setSelectedTeamId(team.id)}
-                  >
-                    {team.crest_url && (
-                      <img src={team.crest_url} alt={team.name} width={40} height={40} />
-                    )}
-                    <span>{team.name}</span>
-                  </button>
-                ))}
-              </div>
+                {format(new Date(date + 'T12:00:00'), 'EEEE d MMMM yyyy')}
+              </h3>
 
-              <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
-                <button
-                  className="btn btn-primary"
-                  onClick={handleSubmit}
-                  disabled={!selectedTeamId || submitPick.isPending}
-                >
-                  {submitPick.isPending
-                    ? 'Saving...'
-                    : existingPick ? 'Update Pick' : 'Confirm Pick'}
-                </button>
-                {changingPick && (
-                  <button
-                    className="btn btn-ghost"
-                    onClick={() => {
-                      setChangingPick(false)
-                      setSelectedTeamId(null)
-                    }}
-                  >
-                    Cancel
-                  </button>
-                )}
-              </div>
+              {dayFixtures.map(fixture => {
+                const homeUsed = usedInPreviousRounds.has(fixture.home_team_id)
+                const awayUsed = usedInPreviousRounds.has(fixture.away_team_id)
+                const homeSelected = selectedTeamId === fixture.home_team_id
+                const awaySelected = selectedTeamId === fixture.away_team_id
 
-              {submitPick.isSuccess && (
-                <p className="msg-success" style={{ marginTop: '12px' }}>
-                  Pick saved! 🎉
-                </p>
-              )}
-              {submitPick.isError && (
-                <p className="msg-error" style={{ marginTop: '12px' }}>
-                  Something went wrong. Please try again.
-                </p>
-              )}
-            </>
+                return (
+                  <div key={fixture.id} style={{
+                    background: 'var(--color-surface)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 'var(--radius-md)',
+                    marginBottom: '8px',
+                    overflow: 'hidden',
+                  }}>
+                    {/* Kickoff time */}
+                    <div style={{
+                      padding: '6px 16px',
+                      borderBottom: '1px solid var(--color-border)',
+                      fontSize: '0.75rem',
+                      color: 'var(--color-muted)',
+                      display: 'flex',
+                      gap: '12px',
+                    }}>
+                      <span>⏰ {format(new Date(fixture.kickoff_time), 'HH:mm')}</span>
+                      {fixture.group_id && <span>Group {fixture.group_id}</span>}
+                    </div>
+
+                    {/* Team buttons */}
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr auto 1fr',
+                      alignItems: 'stretch',
+                    }}>
+                      {/* Home team */}
+                      <button
+                        onClick={() => !homeUsed && setSelectedTeamId(fixture.home_team_id)}
+                        style={{
+                          background: homeSelected
+                            ? 'rgba(35, 134, 54, 0.25)'
+                            : homeUsed
+                            ? 'rgba(255,255,255,0.02)'
+                            : 'transparent',
+                          border: 'none',
+                          borderRight: '1px solid var(--color-border)',
+                          padding: '16px',
+                          cursor: homeUsed ? 'not-allowed' : 'pointer',
+                          opacity: homeUsed ? 0.35 : 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          transition: 'background 0.15s',
+                          outline: homeSelected
+                            ? '2px solid var(--color-accent)'
+                            : 'none',
+                          outlineOffset: '-2px',
+                        }}
+                      >
+                        {fixture.home_team?.crest_url && (
+                          <img
+                            src={fixture.home_team.crest_url}
+                            alt=""
+                            width={32}
+                            height={32}
+                            style={{ objectFit: 'contain', flexShrink: 0 }}
+                          />
+                        )}
+                        <div style={{ textAlign: 'left' }}>
+                          <div style={{
+                            fontWeight: 700,
+                            fontSize: '0.95rem',
+                            color: homeUsed ? 'var(--color-muted)' : 'var(--color-text)',
+                          }}>
+                            {fixture.home_team?.name ?? fixture.home_team_id}
+                          </div>
+                          {homeUsed && (
+                            <div style={{ fontSize: '0.7rem', color: 'var(--color-muted)', marginTop: '2px' }}>
+                              Already used
+                            </div>
+                          )}
+                          {homeSelected && (
+                            <div style={{ fontSize: '0.7rem', color: 'var(--color-accent)', marginTop: '2px' }}>
+                              ✓ Selected
+                            </div>
+                          )}
+                        </div>
+                      </button>
+
+                      {/* VS divider */}
+                      <div style={{
+                        padding: '0 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        color: 'var(--color-muted)',
+                        fontSize: '0.8rem',
+                        fontWeight: 700,
+                        letterSpacing: '1px',
+                      }}>
+                        VS
+                      </div>
+
+                      {/* Away team */}
+                      <button
+                        onClick={() => !awayUsed && setSelectedTeamId(fixture.away_team_id)}
+                        style={{
+                          background: awaySelected
+                            ? 'rgba(35, 134, 54, 0.25)'
+                            : awayUsed
+                            ? 'rgba(255,255,255,0.02)'
+                            : 'transparent',
+                          border: 'none',
+                          borderLeft: '1px solid var(--color-border)',
+                          padding: '16px',
+                          cursor: awayUsed ? 'not-allowed' : 'pointer',
+                          opacity: awayUsed ? 0.35 : 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'flex-end',
+                          gap: '12px',
+                          transition: 'background 0.15s',
+                          outline: awaySelected
+                            ? '2px solid var(--color-accent)'
+                            : 'none',
+                          outlineOffset: '-2px',
+                        }}
+                      >
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{
+                            fontWeight: 700,
+                            fontSize: '0.95rem',
+                            color: awayUsed ? 'var(--color-muted)' : 'var(--color-text)',
+                          }}>
+                            {fixture.away_team?.name ?? fixture.away_team_id}
+                          </div>
+                          {awayUsed && (
+                            <div style={{ fontSize: '0.7rem', color: 'var(--color-muted)', marginTop: '2px' }}>
+                              Already used
+                            </div>
+                          )}
+                          {awaySelected && (
+                            <div style={{ fontSize: '0.7rem', color: 'var(--color-accent)', marginTop: '2px' }}>
+                              ✓ Selected
+                            </div>
+                          )}
+                        </div>
+                        {fixture.away_team?.crest_url && (
+                          <img
+                            src={fixture.away_team.crest_url}
+                            alt=""
+                            width={32}
+                            height={32}
+                            style={{ objectFit: 'contain', flexShrink: 0 }}
+                          />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ))}
+
+          {/* Confirm button */}
+          <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+            <button
+              className="btn btn-primary"
+              onClick={handleSubmit}
+              disabled={!selectedTeamId || submitPick.isPending}
+            >
+              {submitPick.isPending
+                ? 'Saving...'
+                : existingPick ? 'Update Pick' : 'Confirm Pick'}
+            </button>
+            {changingPick && (
+              <button
+                className="btn btn-ghost"
+                onClick={() => {
+                  setChangingPick(false)
+                  setSelectedTeamId(null)
+                }}
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+
+          {submitPick.isSuccess && (
+            <p className="msg-success" style={{ marginTop: '12px' }}>Pick saved! 🎉</p>
+          )}
+          {submitPick.isError && (
+            <p className="msg-error" style={{ marginTop: '12px' }}>
+              Something went wrong. Please try again.
+            </p>
           )}
 
-          {/* Teams already used in previous rounds */}
-          {myPicks.length > 0 && (
+          {/* Teams already used */}
+          {myPicks.filter(p => p.round !== currentRound).length > 0 && (
             <div className="used-teams" style={{ marginTop: '32px' }}>
               <h3>Teams you've already used</h3>
               <div className="used-list">
