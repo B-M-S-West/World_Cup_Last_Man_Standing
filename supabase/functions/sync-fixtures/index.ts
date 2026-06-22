@@ -62,20 +62,25 @@ Deno.serve(async (_req) => {
       await sql`
         INSERT INTO fixtures (
           api_id, home_team_id, away_team_id, kickoff_time,
-          stage, group_id, matchday, home_score, away_score, status
+          stage, group_id, matchday, home_score, away_score, status,
+          home_placeholder, away_placeholder
         )
         VALUES (
           ${m.id}, ${m.homeTeam.tla}, ${m.awayTeam.tla}, ${m.utcDate},
           ${m.stage}, ${groupId}, ${m.matchday ?? null},
           ${m.score?.fullTime?.home ?? null},
           ${m.score?.fullTime?.away ?? null},
-          ${m.status}
+          ${m.status},
+          ${m.homeTeam.tla ? null : (m.homeTeam.name ?? null)},
+          ${m.awayTeam.tla ? null : (m.awayTeam.name ?? null)}
         )
         ON CONFLICT (api_id) DO UPDATE SET
-          home_score   = EXCLUDED.home_score,
-          away_score   = EXCLUDED.away_score,
-          status       = EXCLUDED.status,
-          kickoff_time = EXCLUDED.kickoff_time
+          home_score        = EXCLUDED.home_score,
+          away_score        = EXCLUDED.away_score,
+          status            = EXCLUDED.status,
+          kickoff_time      = EXCLUDED.kickoff_time,
+          home_placeholder  = EXCLUDED.home_placeholder,
+          away_placeholder  = EXCLUDED.away_placeholder
       `
     }
     console.log(`Synced ${matchesResponse.matches.length} fixtures`)

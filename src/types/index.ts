@@ -20,6 +20,8 @@ export type Fixture = {
   home_score: number | null  // null until the match is played
   away_score: number | null
   status: FixtureStatus
+  home_placeholder: string | null
+  away_placeholder: string | null
   // These are "joined" fields — fetched from the teams table in the same query
   home_team?: Team
   away_team?: Team
