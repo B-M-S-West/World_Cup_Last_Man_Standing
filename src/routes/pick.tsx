@@ -2,8 +2,8 @@ import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
 import { format } from 'date-fns'
 import { supabase } from '../lib/supabase'
-import { useMyPicks, useSubmitPick, useFixtures } from '../lib/queries'
-import { STAGE_TO_ROUND, STAGE_LABELS, type Fixture } from '../types'
+import { useMyPicks, useSubmitPick, useFixtures, useCurrentUser } from '../lib/queries'
+import { STAGE_LABELS, type Fixture, type Pick } from '../types'
 
 export const Route = createFileRoute('/pick')({
   beforeLoad: async () => {
@@ -13,14 +13,36 @@ export const Route = createFileRoute('/pick')({
   component: PickPage,
 })
 
-function getNextFixture(fixtures: Fixture[]): Fixture | null {
-  return (
-    fixtures
-      .filter(f => f.status === 'SCHEDULED' || f.status === 'TIMED')
-      .sort((a, b) =>
-        new Date(a.kickoff_time).getTime() - new Date(b.kickoff_time).getTime()
-      )[0] ?? null
-  )
+function getCurrentRoundInfo(fixtures: Fixture[], myPicks: Pick[]): {
+  fixture: Fixture | null
+  round: number
+} {
+  // Find the highest round already picked
+  const highestPickedRound = myPicks.length > 0
+    ? Math.max(...myPicks.map(p => p.round))
+    : 0
+
+  const nextRound = highestPickedRound + 1
+
+  // Find the earliest upcoming fixture for the next round
+  // For group stage, round maps to matchday
+  const roundToMatchday: Record<number, number> = { 1: 1, 2: 2, 3: 3 }
+  const matchday = roundToMatchday[nextRound] ?? nextRound
+
+  const upcoming = fixtures
+    .filter(f =>
+      (f.status === 'SCHEDULED' || f.status === 'TIMED') &&
+      f.stage === 'GROUP_STAGE' &&
+      f.matchday === matchday
+    )
+    .sort((a, b) =>
+      new Date(a.kickoff_time).getTime() - new Date(b.kickoff_time).getTime()
+    )
+
+  return {
+    fixture: upcoming[0] ?? null,
+    round: nextRound,
+  }
 }
 
 function PickPage() {
@@ -31,12 +53,11 @@ function PickPage() {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
   const [changingPick, setChangingPick] = useState(false)
 
-  const nextFixture  = getNextFixture(fixtures)
-  const currentRound = nextFixture ? (STAGE_TO_ROUND[nextFixture.stage] ?? 1) : null
+  const { fixture: nextFixture, round: currentRound } = getCurrentRoundInfo(fixtures, myPicks)
+  const { data: currentUser } = useCurrentUser()
+  const isEliminated = currentUser?.player?.is_active === false
 
-  const existingPick = currentRound !== null
-    ? myPicks.find(p => p.round === currentRound)
-    : null
+  const existingPick = myPicks.find(p => p.round === currentRound) ?? null
 
   useEffect(() => {
     if (existingPick && changingPick) {
@@ -161,9 +182,16 @@ function PickPage() {
       {/* Team selector */}
       {(!existingPick || changingPick) && (
         <div>
-          <div className="msg-info" style={{ marginBottom: '16px' }}>
-            🔒 Your pick will be hidden from other players until 1 hour before kickoff.
-          </div>
+          {isEliminated ? (
+            <div className="msg-info" style={{ marginBottom: '16px' }}>
+              ⚽ You've been eliminated but you can still pick for fun —
+              your pick won't affect the competition.
+            </div>
+          ) : (
+            <div className="msg-info" style={{ marginBottom: '16px' }}>
+              🔒 Your pick will be hidden from other players until 1 hour before kickoff.
+            </div>
+          )}
 
           {availableTeams.length === 0 ? (
             <div className="msg-error">
