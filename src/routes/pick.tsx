@@ -13,23 +13,21 @@ export const Route = createFileRoute('/pick')({
   component: PickPage,
 })
 
+// Returns all fixtures for the current round and the round number
 function getCurrentRoundInfo(fixtures: Fixture[], myPicks: Pick[]): {
-  fixture: Fixture | null
+  fixtures: Fixture[]
   round: number
+  kickoffTime: string | null
 } {
-  // Find the highest round already picked
   const highestPickedRound = myPicks.length > 0
     ? Math.max(...myPicks.map(p => p.round))
     : 0
 
   const nextRound = highestPickedRound + 1
-
-  // Find the earliest upcoming fixture for the next round
-  // For group stage, round maps to matchday
   const roundToMatchday: Record<number, number> = { 1: 1, 2: 2, 3: 3 }
   const matchday = roundToMatchday[nextRound] ?? nextRound
 
-  const upcoming = fixtures
+  const matchdayFixtures = fixtures
     .filter(f =>
       (f.status === 'SCHEDULED' || f.status === 'TIMED') &&
       f.stage === 'GROUP_STAGE' &&
@@ -40,23 +38,25 @@ function getCurrentRoundInfo(fixtures: Fixture[], myPicks: Pick[]): {
     )
 
   return {
-    fixture: upcoming[0] ?? null,
+    fixtures: matchdayFixtures,
     round: nextRound,
+    kickoffTime: matchdayFixtures[0]?.kickoff_time ?? null,
   }
 }
 
 function PickPage() {
   const { data: myPicks = [],  isLoading: picksLoading   } = useMyPicks()
   const { data: fixtures = [], isLoading: fixturesLoading } = useFixtures()
+  const { data: currentUser } = useCurrentUser()
   const submitPick = useSubmitPick()
 
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
   const [changingPick, setChangingPick] = useState(false)
 
-  const { fixture: nextFixture, round: currentRound } = getCurrentRoundInfo(fixtures, myPicks)
-  const { data: currentUser } = useCurrentUser()
-  const isEliminated = currentUser?.player?.is_active === false
+  const { fixtures: roundFixtures, round: currentRound, kickoffTime } =
+    getCurrentRoundInfo(fixtures, myPicks)
 
+  const isEliminated = currentUser?.player?.is_active === false
   const existingPick = myPicks.find(p => p.round === currentRound) ?? null
 
   useEffect(() => {
@@ -65,22 +65,34 @@ function PickPage() {
     }
   }, [existingPick, changingPick])
 
-  // All team IDs already used in previous rounds
-  const usedTeamIds = new Set(myPicks.map(p => p.team_id))
+  // Teams used in previous rounds only (not the current round pick)
+  const usedInPreviousRounds = new Set(
+    myPicks
+      .filter(p => p.round !== currentRound)
+      .map(p => p.team_id)
+  )
 
-  // Teams available to pick — not used before, unless it's the current pick
-  const availableTeams = [nextFixture?.home_team, nextFixture?.away_team]
-    .filter((team): team is NonNullable<typeof team> => {
-      if (!team) return false
-      if (!usedTeamIds.has(team.id)) return true
-      if (existingPick?.team_id === team.id) return true
-      return false
-    })
+  // All unique teams playing in this matchday, excluding previously used teams
+  const availableTeams = roundFixtures
+    .flatMap(f => [f.home_team, f.away_team])
+    .filter((team): team is NonNullable<typeof team> => !!team)
+    .filter((team, index, self) => self.findIndex(t => t.id === team.id) === index)
+    .filter(team => !usedInPreviousRounds.has(team.id))
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  // Find which fixture a team is playing in — needed when submitting
+  const getFixtureForTeam = (teamId: string): Fixture | null =>
+    roundFixtures.find(f =>
+      f.home_team_id === teamId || f.away_team_id === teamId
+    ) ?? null
 
   const handleSubmit = async () => {
-    if (!selectedTeamId || !nextFixture || currentRound === null) return
+    if (!selectedTeamId || currentRound === null) return
+    const fixture = getFixtureForTeam(selectedTeamId)
+    if (!fixture) return
+
     await submitPick.mutateAsync({
-      fixtureId: nextFixture.id,
+      fixtureId: fixture.id,
       teamId:    selectedTeamId,
       round:     currentRound,
     })
@@ -88,11 +100,13 @@ function PickPage() {
     setSelectedTeamId(null)
   }
 
+  // ── Loading ───────────────────────────────────────────────
   if (picksLoading || fixturesLoading) {
     return <div className="loading">Loading...</div>
   }
 
-  if (!nextFixture) {
+  // ── No upcoming fixtures ──────────────────────────────────
+  if (roundFixtures.length === 0) {
     return (
       <div className="page-container">
         <h1>My Pick</h1>
@@ -103,20 +117,22 @@ function PickPage() {
     )
   }
 
+  // ── Main render ───────────────────────────────────────────
   return (
     <div className="page-container pick-page">
-      <h1>Round {currentRound} — {STAGE_LABELS[nextFixture.stage] ?? nextFixture.stage}</h1>
+      <h1>Round {currentRound} — {STAGE_LABELS['GROUP_STAGE']}</h1>
 
       <p className="fixture-info">
-        Next match:{' '}
-        <strong>{nextFixture.home_team?.name ?? nextFixture.home_team_id}</strong>
-        {' vs '}
-        <strong>{nextFixture.away_team?.name ?? nextFixture.away_team_id}</strong>
-        {' — '}
-        {format(new Date(nextFixture.kickoff_time), 'EEEE d MMMM, HH:mm')}
+        Pick any team playing in matchday {currentRound}.
+        First game kicks off{' '}
+        <strong>
+          {kickoffTime
+            ? format(new Date(kickoffTime), 'EEEE d MMMM, HH:mm')
+            : '—'}
+        </strong>
       </p>
 
-      {/* Already picked and not changing */}
+      {/* Already picked this round and not changing */}
       {existingPick && !changingPick && (
         <div>
           <div className="pick-sealed card">
@@ -179,7 +195,7 @@ function PickPage() {
         </div>
       )}
 
-      {/* Team selector */}
+      {/* Team selector — for new picks or changing existing pick */}
       {(!existingPick || changingPick) && (
         <div>
           {isEliminated ? (
@@ -196,11 +212,13 @@ function PickPage() {
           {availableTeams.length === 0 ? (
             <div className="msg-error">
               <strong>No teams available.</strong><br />
-              You've already used both teams in this fixture in a previous round.
+              You've already used all the teams playing in this round.
             </div>
           ) : (
             <>
-              <div className="team-options">
+              <div className="team-options" style={{
+                gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))'
+              }}>
                 {availableTeams.map(team => (
                   <button
                     key={team.id}
@@ -208,25 +226,30 @@ function PickPage() {
                     onClick={() => setSelectedTeamId(team.id)}
                   >
                     {team.crest_url && (
-                      <img src={team.crest_url} alt={team.name} width={56} height={56} />
+                      <img src={team.crest_url} alt={team.name} width={40} height={40} />
                     )}
                     <span>{team.name}</span>
                   </button>
                 ))}
               </div>
 
-              <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
                 <button
                   className="btn btn-primary"
                   onClick={handleSubmit}
                   disabled={!selectedTeamId || submitPick.isPending}
                 >
-                  {submitPick.isPending ? 'Saving...' : existingPick ? 'Update Pick' : 'Confirm Pick'}
+                  {submitPick.isPending
+                    ? 'Saving...'
+                    : existingPick ? 'Update Pick' : 'Confirm Pick'}
                 </button>
                 {changingPick && (
                   <button
                     className="btn btn-ghost"
-                    onClick={() => { setChangingPick(false); setSelectedTeamId(null) }}
+                    onClick={() => {
+                      setChangingPick(false)
+                      setSelectedTeamId(null)
+                    }}
                   >
                     Cancel
                   </button>
@@ -234,7 +257,9 @@ function PickPage() {
               </div>
 
               {submitPick.isSuccess && (
-                <p className="msg-success" style={{ marginTop: '12px' }}>Pick saved! 🎉</p>
+                <p className="msg-success" style={{ marginTop: '12px' }}>
+                  Pick saved! 🎉
+                </p>
               )}
               {submitPick.isError && (
                 <p className="msg-error" style={{ marginTop: '12px' }}>
@@ -244,22 +269,32 @@ function PickPage() {
             </>
           )}
 
-          {/* Teams already used */}
+          {/* Teams already used in previous rounds */}
           {myPicks.length > 0 && (
             <div className="used-teams" style={{ marginTop: '32px' }}>
-              <h3>Teams you've used</h3>
+              <h3>Teams you've already used</h3>
               <div className="used-list">
-                {myPicks.map(pick => (
-                  <span
-                    key={pick.id}
-                    className={`used-tag used-tag--${pick.result ?? 'pending'}`}
-                  >
-                    {pick.team?.name ?? pick.team_id} (R{pick.round})
-                    {pick.result === 'win'  && ' ✅'}
-                    {pick.result === 'draw' && ' ❌'}
-                    {pick.result === 'loss' && ' ❌'}
-                  </span>
-                ))}
+                {myPicks
+                  .filter(p => p.round !== currentRound)
+                  .map(pick => (
+                    <span
+                      key={pick.id}
+                      className={`used-tag used-tag--${pick.result ?? 'pending'}`}
+                    >
+                      {pick.team?.crest_url && (
+                        <img
+                          src={pick.team.crest_url}
+                          alt=""
+                          width={14}
+                          style={{ marginRight: 4, objectFit: 'contain' }}
+                        />
+                      )}
+                      {pick.team?.name ?? pick.team_id} (R{pick.round})
+                      {pick.result === 'win'  && ' ✅'}
+                      {pick.result === 'draw' && ' ❌'}
+                      {pick.result === 'loss' && ' ❌'}
+                    </span>
+                  ))}
               </div>
             </div>
           )}
