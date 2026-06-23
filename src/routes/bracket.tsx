@@ -130,11 +130,13 @@ function BracketPage() {
           gap: 0,
           minWidth: rounds.length * (CARD_WIDTH + ROUND_GAP),
         }}>
-          {rounds.map((roundNodes, roundIdx) => (
+          {rounds.map((roundNodes, roundIdx) => {
+            const isFinalRound = roundIdx === rounds.length - 1
+            return (
             <div key={roundIdx} style={{ display: 'flex', flexDirection: 'column' }}>
               {/* Round label */}
               <div style={{
-                width: CARD_WIDTH + ROUND_GAP,
+                width: isFinalRound ? CARD_WIDTH + ROUND_GAP : CARD_WIDTH + ROUND_GAP,
                 textAlign: 'center',
                 fontSize: '0.7rem',
                 fontWeight: 700,
@@ -197,26 +199,27 @@ function BracketPage() {
                   )
                 })}
               </div>
-            </div>
-          ))}
-        </div>
 
-        {/* Third place play-off */}
-        {thirdPlace && (
-          <div style={{ marginTop: 40, paddingLeft: 0 }}>
-            <div style={{
-              fontSize: '0.7rem',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '1px',
-              color: 'var(--color-muted)',
-              marginBottom: 10,
-            }}>
-              Third Place Play-off
+              {/* Third place — rendered below the Final in the same column */}
+              {isFinalRound && thirdPlace && (
+                <div style={{ paddingLeft: CONNECTOR_W, marginTop: 32 }}>
+                  <div style={{
+                    fontSize: '0.7rem',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '1px',
+                    color: 'var(--color-muted)',
+                    marginBottom: 8,
+                    textAlign: 'center',
+                  }}>
+                    Third Place Play-off
+                  </div>
+                  <BracketMatch fixture={thirdPlace} width={CARD_WIDTH} />
+                </div>
+              )}
             </div>
-            <BracketMatch fixture={thirdPlace} width={CARD_WIDTH} />
-          </div>
-        )}
+          )})}
+        </div>
       </div>
     </div>
   )
@@ -242,11 +245,11 @@ function ConnectorArm({
 
   return (
     <div style={{ position: 'relative', width, flexShrink: 0, height: cardHeight }}>
-      {/* Horizontal line from vertical rail to card */}
+      {/* Horizontal line — full width so it bridges the incoming right connector */}
       <div style={{
         position: 'absolute',
         top: '50%',
-        left: width / 2,
+        left: 0,
         right: 0,
         height: 2,
         background: 'var(--color-border)',
