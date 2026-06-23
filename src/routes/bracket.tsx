@@ -2,7 +2,7 @@ import { createFileRoute, redirect } from '@tanstack/react-router'
 import { format } from 'date-fns'
 import { supabase } from '../lib/supabase'
 import { useFixtures } from '../lib/queries'
-import { STAGE_LABELS, type Fixture } from '../types'
+import { type Fixture } from '../types'
 
 export const Route = createFileRoute('/bracket')({
   beforeLoad: async () => {
@@ -14,10 +14,8 @@ export const Route = createFileRoute('/bracket')({
 
 // ── Bracket wiring ────────────────────────────────────────────
 // [topChildApiId, bottomChildApiId, parentApiId]
-// Top child → home slot, bottom child → away slot of parent.
-// ⚠️ Best-effort based on FIFA bracket numbering — verify once Last 32 begins.
 const BRACKET_CONNECTIONS: [number, number, number][] = [
-  // Last 32 pairs → Last 16
+  // Last 32 → Last 16
   [537417, 537415, 537376],
   [537418, 537423, 537375],
   [537416, 537424, 537377],
@@ -26,42 +24,38 @@ const BRACKET_CONNECTIONS: [number, number, number][] = [
   [537420, 537419, 537380],
   [537429, 537428, 537381],
   [537427, 537430, 537382],
-  // Last 16 pairs → QF
+  // Last 16 → QF
   [537376, 537375, 537383],
   [537377, 537378, 537384],
   [537379, 537380, 537385],
   [537381, 537382, 537386],
-  // QF pairs → SF
+  // QF → SF
   [537383, 537384, 537387],
   [537385, 537386, 537388],
   // SF → Final
   [537387, 537388, 537390],
 ]
 
-// SF api_ids whose losers go to the third-place play-off
+const FINAL_API_ID       = 537390
 const THIRD_PLACE_API_ID = 537389
-const FINAL_API_ID = 537390
 
-// ── Tree types ────────────────────────────────────────────────
+// ── Tree ──────────────────────────────────────────────────────
 type BracketNode = {
   fixture: Fixture | undefined
-  top: BracketNode | null
+  top:    BracketNode | null
   bottom: BracketNode | null
 }
 
-function buildTree(
-  apiId: number,
-  byApiId: Record<number, Fixture>,
-): BracketNode {
-  const connection = BRACKET_CONNECTIONS.find(([, , parent]) => parent === apiId)
+function buildTree(apiId: number, byApiId: Record<number, Fixture>): BracketNode {
+  const conn = BRACKET_CONNECTIONS.find(([, , p]) => p === apiId)
   return {
     fixture: byApiId[apiId],
-    top:    connection ? buildTree(connection[0], byApiId) : null,
-    bottom: connection ? buildTree(connection[1], byApiId) : null,
+    top:    conn ? buildTree(conn[0], byApiId) : null,
+    bottom: conn ? buildTree(conn[1], byApiId) : null,
   }
 }
 
-// Flatten tree into columns (rounds), left = deepest children
+// Returns rounds[0] = Last 32 ... rounds[n] = Final
 function collectRounds(node: BracketNode): BracketNode[][] {
   const rounds: BracketNode[][] = []
   function walk(n: BracketNode, depth: number) {
@@ -71,30 +65,40 @@ function collectRounds(node: BracketNode): BracketNode[][] {
     if (n.bottom) walk(n.bottom, depth + 1)
   }
   walk(node, 0)
-  rounds.reverse() // leftmost = Last 32
+  rounds.reverse()
   return rounds
 }
 
-// ── Dimensions ────────────────────────────────────────────────
-const CARD_HEIGHT   = 76   // px — two team rows + header
-const CARD_WIDTH    = 176  // px
-const CONNECTOR_W   = 28   // px — horizontal connector arm width
-const ROUND_GAP     = CONNECTOR_W * 2
+// ── Layout math ───────────────────────────────────────────────
+// All positions are in px. Cards are absolutely positioned.
+// SVG lines are drawn between computed centres.
 
-// Uniform vertical gap between ALL consecutive cards in a round.
-// Doubles each round so cards centre against their children pair.
-// roundIndex 0 = Last 32 (no gap), 1 = Last 16, 2 = QF, ...
-function cardGap(roundIndex: number): number {
-  return CARD_HEIGHT * (Math.pow(2, roundIndex) - 1)
-}
+const CARD_H    = 76    // height of a match card
+const CARD_W    = 184   // width of a match card
+const INTER_COL = 52    // horizontal gap between right edge of col N and left edge of col N+1
+const COL_STEP  = CARD_W + INTER_COL
 
-// Top offset for the very first card in a round — half the card gap —
-// so it sits centred against the top child pair from the previous round.
-function initialOffset(roundIndex: number): number {
-  return (CARD_HEIGHT / 2) * (Math.pow(2, roundIndex) - 1)
-}
+// Vertical gap between consecutive cards within a round (doubles each round)
+const gapBetween = (r: number) => CARD_H * (Math.pow(2, r) - 1)
 
-// ── Main page ─────────────────────────────────────────────────
+// Top offset of first card in round r, so it centres against its children pair
+const topOffset = (r: number) => (CARD_H / 2) * (Math.pow(2, r) - 1)
+
+const cardLeft   = (r: number)           => r * COL_STEP
+const cardTop    = (r: number, i: number) => topOffset(r) + i * (CARD_H + gapBetween(r))
+const centrY     = (r: number, i: number) => cardTop(r, i) + CARD_H / 2
+
+// Vertical rail X sits halfway across the inter-column gap
+const railX = (childR: number) => cardLeft(childR) + CARD_W + INTER_COL / 2
+
+const ROUND_LABELS = ['Round of 32', 'Round of 16', 'Quarter-Finals', 'Semi-Finals', 'Final']
+const LABEL_H      = 28   // px above the bracket for round labels
+const NUM_ROUNDS   = 5
+const TOTAL_W      = (NUM_ROUNDS - 1) * COL_STEP + CARD_W
+const BRACKET_H    = 16 * CARD_H   // Last 32: 16 cards × 76px, no gaps
+const BORDER_COL   = '#30363d'     // var(--color-border)
+
+// ── Page ──────────────────────────────────────────────────────
 function BracketPage() {
   const { data: fixtures = [], isLoading } = useFixtures()
 
@@ -103,190 +107,147 @@ function BracketPage() {
   const byApiId: Record<number, Fixture> = {}
   for (const f of fixtures) byApiId[f.api_id] = f
 
-  const root       = buildTree(FINAL_API_ID, byApiId)
-  const rounds     = collectRounds(root)
+  const root   = buildTree(FINAL_API_ID, byApiId)
+  const rounds = collectRounds(root)
+
+  // api_id → {r, i} for SVG line lookup
+  const posMap = new Map<number, { r: number; i: number }>()
+  rounds.forEach((nodes, r) =>
+    nodes.forEach((node, i) => {
+      if (node.fixture) posMap.set(node.fixture.api_id, { r, i })
+    })
+  )
+
   const thirdPlace = byApiId[THIRD_PLACE_API_ID]
 
-  const roundLabels: Record<number, string> = {
-    0: 'Round of 32',
-    1: 'Round of 16',
-    2: 'Quarter-Finals',
-    3: 'Semi-Finals',
-    4: 'Final',
-  }
+  // Third place sits below the Final with a gap
+  const finalR = NUM_ROUNDS - 1
+  const thirdTop  = cardTop(finalR, 0) + CARD_H + 56
+  const TOTAL_H   = LABEL_H + Math.max(BRACKET_H, thirdTop + CARD_H + 24)
 
   return (
-    <div className="page-container" style={{ maxWidth: '100%', paddingLeft: 16, paddingRight: 16 }}>
+    <div className="page-container" style={{ maxWidth: '100%', padding: '0 16px' }}>
       <h1 style={{ marginBottom: 4 }}>Tournament Bracket</h1>
       <p style={{ color: 'var(--color-muted)', marginBottom: 24, fontSize: '0.875rem' }}>
         WC2026 · Knockout Stage · Teams and results populate automatically
       </p>
 
-      {/* Horizontal scroll wrapper */}
+      {/* Outer scroll wrapper */}
       <div style={{ overflowX: 'auto', overflowY: 'visible', paddingBottom: 32 }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: 0,
-          minWidth: rounds.length * (CARD_WIDTH + ROUND_GAP),
-        }}>
-          {rounds.map((roundNodes, roundIdx) => {
-            const isFinalRound = roundIdx === rounds.length - 1
-            return (
-            <div key={roundIdx} style={{ display: 'flex', flexDirection: 'column' }}>
-              {/* Round label */}
+
+        {/* Fixed-size canvas — cards + SVG positioned inside */}
+        <div style={{ position: 'relative', width: TOTAL_W, height: TOTAL_H }}>
+
+          {/* ── Round labels ── */}
+          {ROUND_LABELS.map((label, r) => (
+            <div key={r} style={{
+              position: 'absolute',
+              left: cardLeft(r),
+              top: 0,
+              width: CARD_W,
+              textAlign: 'center',
+              fontSize: '0.68rem',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '1px',
+              color: 'var(--color-muted)',
+            }}>
+              {label}
+            </div>
+          ))}
+
+          {/* ── SVG connector lines ── */}
+          <svg
+            style={{
+              position: 'absolute',
+              top: LABEL_H,
+              left: 0,
+              width: TOTAL_W,
+              height: TOTAL_H - LABEL_H,
+              pointerEvents: 'none',
+              overflow: 'visible',
+            }}
+          >
+            {BRACKET_CONNECTIONS.map(([topId, botId, parId], idx) => {
+              const tp = posMap.get(topId)
+              const bp = posMap.get(botId)
+              const pp = posMap.get(parId)
+              if (!tp || !bp || !pp) return null
+
+              const topCY  = centrY(tp.r, tp.i)
+              const botCY  = centrY(bp.r, bp.i)
+              const parCY  = centrY(pp.r, pp.i)
+              const rx     = railX(tp.r)
+              const cRight = cardLeft(tp.r) + CARD_W
+              const pLeft  = cardLeft(pp.r)
+
+              return (
+                <g key={idx} stroke={BORDER_COL} strokeWidth="2" fill="none" strokeLinecap="round">
+                  {/* Top child → rail */}
+                  <line x1={cRight} y1={topCY} x2={rx} y2={topCY} />
+                  {/* Bottom child → rail */}
+                  <line x1={cRight} y1={botCY} x2={rx} y2={botCY} />
+                  {/* Vertical rail spanning both children */}
+                  <line x1={rx} y1={topCY} x2={rx} y2={botCY} />
+                  {/* Rail → parent */}
+                  <line x1={rx} y1={parCY} x2={pLeft} y2={parCY} />
+                </g>
+              )
+            })}
+          </svg>
+
+          {/* ── Match cards ── */}
+          {rounds.map((nodes, r) =>
+            nodes.map((node, i) => (
+              <div
+                key={`${r}-${i}`}
+                style={{
+                  position: 'absolute',
+                  left: cardLeft(r),
+                  top:  cardTop(r, i) + LABEL_H,
+                  width: CARD_W,
+                }}
+              >
+                <BracketMatch fixture={node.fixture} width={CARD_W} />
+              </div>
+            ))
+          )}
+
+          {/* ── Third place play-off ── */}
+          {thirdPlace && (
+            <div style={{
+              position: 'absolute',
+              left: cardLeft(finalR),
+              top:  thirdTop + LABEL_H,
+              width: CARD_W,
+            }}>
               <div style={{
-                width: isFinalRound ? CARD_WIDTH + ROUND_GAP : CARD_WIDTH + ROUND_GAP,
-                textAlign: 'center',
-                fontSize: '0.7rem',
+                fontSize: '0.65rem',
                 fontWeight: 700,
                 textTransform: 'uppercase',
                 letterSpacing: '1px',
                 color: 'var(--color-muted)',
-                paddingBottom: 10,
-                paddingLeft: roundIdx === 0 ? 0 : CONNECTOR_W,
+                textAlign: 'center',
+                marginBottom: 8,
               }}>
-                {roundLabels[roundIdx] ?? ''}
+                Third Place Play-off
               </div>
-
-              {/* Match cards for this round */}
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {roundNodes.map((node, nodeIdx) => {
-                  const isLast   = roundIdx === rounds.length - 1
-                  const isFirst  = roundIdx === 0
-                  // First card gets an initial offset to centre it against its top child pair.
-                  // All subsequent cards get a uniform gap (same formula, doubles each round).
-                  const marginTop = nodeIdx === 0
-                    ? initialOffset(roundIdx)
-                    : cardGap(roundIdx)
-
-                  return (
-                    <div
-                      key={nodeIdx}
-                      style={{
-                        marginTop,
-                        display: 'flex',
-                        alignItems: 'center',
-                      }}
-                    >
-                      {/* Left connector arm (not on first round) */}
-                      {!isFirst && (
-                        <ConnectorArm
-                          cardHeight={CARD_HEIGHT}
-                          width={CONNECTOR_W}
-                          isTop={nodeIdx % 2 === 0}
-                          isBottom={nodeIdx % 2 === 1}
-                          siblingGap={cardGap(roundIdx - 1)}
-                        />
-                      )}
-
-                      {/* Match card */}
-                      <BracketMatch
-                        fixture={node.fixture}
-                        width={CARD_WIDTH}
-                      />
-
-                      {/* Right connector arm (not on final) */}
-                      {!isLast && (
-                        <div style={{
-                          width: CONNECTOR_W,
-                          height: 2,
-                          background: 'var(--color-border)',
-                          flexShrink: 0,
-                        }} />
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-
-              {/* Third place — rendered below the Final in the same column */}
-              {isFinalRound && thirdPlace && (
-                <div style={{ paddingLeft: CONNECTOR_W, marginTop: 32 }}>
-                  <div style={{
-                    fontSize: '0.7rem',
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    letterSpacing: '1px',
-                    color: 'var(--color-muted)',
-                    marginBottom: 8,
-                    textAlign: 'center',
-                  }}>
-                    Third Place Play-off
-                  </div>
-                  <BracketMatch fixture={thirdPlace} width={CARD_WIDTH} />
-                </div>
-              )}
+              <BracketMatch fixture={thirdPlace} width={CARD_W} />
             </div>
-          )})}
+          )}
         </div>
       </div>
     </div>
   )
 }
 
-// ── Connector arm ─────────────────────────────────────────────
-// Draws the ├─ / └─ shaped connector on the left of a card
-function ConnectorArm({
-  cardHeight,
-  width,
-  isTop,
-  isBottom,
-  siblingGap,
-}: {
-  cardHeight: number
-  width: number
-  isTop: boolean
-  isBottom: boolean
-  siblingGap: number
-}) {
-  // Vertical extent: half of (cardHeight + siblingGap)
-  const verticalReach = (cardHeight + siblingGap) / 2
-
-  return (
-    <div style={{ position: 'relative', width, flexShrink: 0, height: cardHeight }}>
-      {/* Horizontal line — full width so it bridges the incoming right connector */}
-      <div style={{
-        position: 'absolute',
-        top: '50%',
-        left: 0,
-        right: 0,
-        height: 2,
-        background: 'var(--color-border)',
-        transform: 'translateY(-1px)',
-      }} />
-
-      {/* Vertical rail — extends up (for top card) or down (for bottom card) */}
-      <div style={{
-        position: 'absolute',
-        left: width / 2 - 1,
-        width: 2,
-        background: 'var(--color-border)',
-        ...(isTop ? {
-          top: '50%',
-          height: verticalReach,
-        } : {
-          bottom: '50%',
-          height: verticalReach,
-        }),
-      }} />
-    </div>
-  )
-}
-
 // ── Match card ────────────────────────────────────────────────
-function BracketMatch({
-  fixture,
-  width,
-}: {
-  fixture: Fixture | undefined
-  width: number
-}) {
+function BracketMatch({ fixture, width }: { fixture: Fixture | undefined; width: number }) {
   if (!fixture) {
     return (
-      <div style={cardStyle(width)}>
+      <div style={cardShell(width)}>
         <TeamRow name="TBD" dimmed />
-        <div style={dividerStyle} />
+        <div style={divider} />
         <TeamRow name="TBD" dimmed />
       </div>
     )
@@ -296,7 +257,6 @@ function BracketMatch({
   const homeName   = fixture.home_team?.name ?? fixture.home_placeholder ?? 'TBD'
   const awayName   = fixture.away_team?.name ?? fixture.away_placeholder ?? 'TBD'
 
-  // Determine winner for highlighting
   let homeWon: boolean | null = null
   let awayWon: boolean | null = null
   if (isFinished && fixture.home_score !== null && fixture.away_score !== null) {
@@ -305,12 +265,12 @@ function BracketMatch({
   }
 
   return (
-    <div style={cardStyle(width)}>
-      {/* Kickoff date strip */}
+    <div style={cardShell(width)}>
+      {/* Date strip */}
       <div style={{
-        fontSize: '0.65rem',
+        fontSize: '0.63rem',
         color: 'var(--color-muted)',
-        padding: '4px 8px 3px',
+        padding: '3px 8px',
         borderBottom: '1px solid var(--color-border)',
         whiteSpace: 'nowrap',
         overflow: 'hidden',
@@ -319,7 +279,6 @@ function BracketMatch({
         {format(new Date(fixture.kickoff_time), 'd MMM · HH:mm')}
       </div>
 
-      {/* Home team */}
       <TeamRow
         name={homeName}
         crest={fixture.home_team?.crest_url}
@@ -328,10 +287,7 @@ function BracketMatch({
         dimmed={homeWon === false}
         isPlaceholder={!fixture.home_team}
       />
-
-      <div style={dividerStyle} />
-
-      {/* Away team */}
+      <div style={divider} />
       <TeamRow
         name={awayName}
         crest={fixture.away_team?.crest_url}
@@ -345,12 +301,7 @@ function BracketMatch({
 }
 
 function TeamRow({
-  name,
-  crest,
-  score,
-  won,
-  dimmed,
-  isPlaceholder,
+  name, crest, score, won, dimmed, isPlaceholder,
 }: {
   name: string
   crest?: string | null
@@ -365,31 +316,24 @@ function TeamRow({
       alignItems: 'center',
       gap: 6,
       padding: '5px 8px',
+      minHeight: 28,
       background: won ? 'rgba(35,134,54,0.15)' : 'transparent',
       borderLeft: won ? '3px solid var(--color-accent)' : '3px solid transparent',
-      opacity: dimmed ? 0.45 : 1,
-      minHeight: 28,
+      opacity: dimmed ? 0.4 : 1,
     }}>
-      {crest ? (
-        <img
-          src={crest}
-          alt=""
-          width={16}
-          height={16}
-          style={{ objectFit: 'contain', flexShrink: 0 }}
-        />
-      ) : (
-        <div style={{ width: 16, height: 16, flexShrink: 0 }} />
-      )}
+      {crest
+        ? <img src={crest} alt="" width={16} height={16} style={{ objectFit: 'contain', flexShrink: 0 }} />
+        : <div style={{ width: 16, height: 16, flexShrink: 0 }} />
+      }
       <span style={{
         fontSize: '0.72rem',
         fontWeight: won ? 700 : 500,
         color: isPlaceholder ? 'var(--color-muted)' : 'var(--color-text)',
+        fontStyle: isPlaceholder ? 'italic' : 'normal',
         whiteSpace: 'nowrap',
         overflow: 'hidden',
         textOverflow: 'ellipsis',
         flex: 1,
-        fontStyle: isPlaceholder ? 'italic' : 'normal',
       }}>
         {name}
       </span>
@@ -408,17 +352,14 @@ function TeamRow({
   )
 }
 
-// ── Shared styles ─────────────────────────────────────────────
-const dividerStyle: React.CSSProperties = {
+const divider: React.CSSProperties = {
   height: 1,
   background: 'var(--color-border)',
-  margin: '0',
 }
 
-function cardStyle(width: number): React.CSSProperties {
+function cardShell(width: number): React.CSSProperties {
   return {
     width,
-    flexShrink: 0,
     background: 'var(--color-surface)',
     border: '1px solid var(--color-border)',
     borderRadius: 'var(--radius-md)',
