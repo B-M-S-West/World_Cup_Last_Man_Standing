@@ -75,12 +75,18 @@ Deno.serve(async (_req) => {
           ${m.awayTeam.tla ? null : (m.awayTeam.name ?? null)}
         )
         ON CONFLICT (api_id) DO UPDATE SET
-          home_score        = EXCLUDED.home_score,
-          away_score        = EXCLUDED.away_score,
-          status            = EXCLUDED.status,
-          kickoff_time      = EXCLUDED.kickoff_time,
-          home_placeholder  = EXCLUDED.home_placeholder,
-          away_placeholder  = EXCLUDED.away_placeholder
+          home_score   = EXCLUDED.home_score,
+          away_score   = EXCLUDED.away_score,
+          status       = EXCLUDED.status,
+          kickoff_time = EXCLUDED.kickoff_time,
+          home_placeholder = CASE
+            WHEN EXCLUDED.home_placeholder IS NOT NULL THEN EXCLUDED.home_placeholder
+            ELSE fixtures.home_placeholder
+          END,
+          away_placeholder = CASE
+            WHEN EXCLUDED.away_placeholder IS NOT NULL THEN EXCLUDED.away_placeholder
+            ELSE fixtures.away_placeholder
+          END
       `
     }
     console.log(`Synced ${matchesResponse.matches.length} fixtures`)
