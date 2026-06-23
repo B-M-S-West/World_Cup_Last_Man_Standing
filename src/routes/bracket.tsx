@@ -81,11 +81,17 @@ const CARD_WIDTH    = 176  // px
 const CONNECTOR_W   = 28   // px — horizontal connector arm width
 const ROUND_GAP     = CONNECTOR_W * 2
 
-// Vertical gap between match pairs within a round (doubles each round)
-function pairGap(roundIndex: number): number {
-  // roundIndex 0 = Last 32 (no gap), 1 = Last 16, ...
-  if (roundIndex === 0) return 0
+// Uniform vertical gap between ALL consecutive cards in a round.
+// Doubles each round so cards centre against their children pair.
+// roundIndex 0 = Last 32 (no gap), 1 = Last 16, 2 = QF, ...
+function cardGap(roundIndex: number): number {
   return CARD_HEIGHT * (Math.pow(2, roundIndex) - 1)
+}
+
+// Top offset for the very first card in a round — half the card gap —
+// so it sits centred against the top child pair from the previous round.
+function initialOffset(roundIndex: number): number {
+  return (CARD_HEIGHT / 2) * (Math.pow(2, roundIndex) - 1)
 }
 
 // ── Main page ─────────────────────────────────────────────────
@@ -146,9 +152,11 @@ function BracketPage() {
                 {roundNodes.map((node, nodeIdx) => {
                   const isLast   = roundIdx === rounds.length - 1
                   const isFirst  = roundIdx === 0
-                  const gap      = pairGap(roundIdx)
-                  // Add top margin for every even-indexed card (start of a pair) except first
-                  const marginTop = nodeIdx > 0 && nodeIdx % 2 === 0 ? gap : 0
+                  // First card gets an initial offset to centre it against its top child pair.
+                  // All subsequent cards get a uniform gap (same formula, doubles each round).
+                  const marginTop = nodeIdx === 0
+                    ? initialOffset(roundIdx)
+                    : cardGap(roundIdx)
 
                   return (
                     <div
@@ -166,7 +174,7 @@ function BracketPage() {
                           width={CONNECTOR_W}
                           isTop={nodeIdx % 2 === 0}
                           isBottom={nodeIdx % 2 === 1}
-                          siblingGap={pairGap(roundIdx - 1)}
+                          siblingGap={cardGap(roundIdx - 1)}
                         />
                       )}
 
