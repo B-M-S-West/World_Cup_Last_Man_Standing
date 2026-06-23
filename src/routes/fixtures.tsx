@@ -82,7 +82,7 @@ function FixtureCard({ fixture }: { fixture: Fixture }) {
           {fixture.home_team?.crest_url && (
             <img src={fixture.home_team.crest_url} alt={fixture.home_team.name} />
           )}
-          {fixture.home_team?.name ?? fixture.home_placeholder ?? fixture.home_team_id}
+          {fixture.home_team?.name ?? fixture.home_placeholder ?? '—'}
         </span>
 
         <div className="fixture-score">
@@ -98,7 +98,7 @@ function FixtureCard({ fixture }: { fixture: Fixture }) {
         </div>
 
         <span className="fixture-team fixture-team--away">
-          {fixture.away_team?.name ?? fixture.away_placeholder ?? fixture.away_team_id}
+          {fixture.away_team?.name ?? fixture.away_placeholder ?? '—'}
           {fixture.away_team?.crest_url && (
             <img src={fixture.away_team.crest_url} alt={fixture.away_team.name} />
           )}
