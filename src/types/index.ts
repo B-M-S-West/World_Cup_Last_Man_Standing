@@ -30,8 +30,8 @@ export type Fixture = {
 // Every possible stage value that football-data.org can return
 export type FixtureStage =
   | 'GROUP_STAGE'
-  | 'ROUND_OF_32'
-  | 'ROUND_OF_16'
+  | 'LAST_32'
+  | 'LAST_16'
   | 'QUARTER_FINALS'
   | 'SEMI_FINALS'
   | 'THIRD_PLACE'
@@ -97,8 +97,8 @@ export type PickResult = 'win' | 'draw' | 'loss'
 // Used to know which round number to assign a pick to
 export const STAGE_TO_ROUND: Record<string, number> = {
   GROUP_STAGE:     1,
-  ROUND_OF_32:    2,
-  ROUND_OF_16:    3,
+  LAST_32:    2,
+  LAST_16:    3,
   QUARTER_FINALS:  4,
   SEMI_FINALS:    5,
   THIRD_PLACE:    5,
@@ -108,7 +108,8 @@ export const STAGE_TO_ROUND: Record<string, number> = {
 // Human-readable labels for display in the UI
 export const STAGE_LABELS: Record<string, string> = {
   GROUP_STAGE:     'Group Stage',
-  ROUND_OF_32:    'Round of 32',
+  LAST_32:    'Last 32',
+  LAST_16:    'Last 16', 
   ROUND_OF_16:    'Round of 16',
   QUARTER_FINALS:  'Quarter-Finals',
   SEMI_FINALS:    'Semi-Finals',
@@ -119,8 +120,8 @@ export const STAGE_LABELS: Record<string, string> = {
 // Ordered list used for filter buttons on the fixtures page
 export const STAGES_IN_ORDER: FixtureStage[] = [
   'GROUP_STAGE',
-  'ROUND_OF_32',
-  'ROUND_OF_16',
+  'LAST_32',
+  'LAST_16',
   'QUARTER_FINALS',
   'SEMI_FINALS',
   'THIRD_PLACE',
