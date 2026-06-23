@@ -61,6 +61,7 @@ function RootLayout() {
               <Link to="/"         activeProps={{ className: 'active' }}>Home</Link>
               <Link to="/groups"   activeProps={{ className: 'active' }}>Groups</Link>
               <Link to="/fixtures" activeProps={{ className: 'active' }}>Fixtures</Link>
+              <Link to="/bracket"  activeProps={{ className: 'active' }}>Bracket</Link>
               <Link to="/lms"      activeProps={{ className: 'active' }}>LMS</Link>
               <Link to="/pick"     activeProps={{ className: 'active' }}>My Pick</Link>
               <button className="btn-logout" onClick={handleLogout}>Sign Out</button>
