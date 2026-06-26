@@ -98,6 +98,44 @@ function PickPage() {
     return <div className="loading">Loading...</div>
   }
 
+  // Hard block for eliminated players
+  if (isEliminated) {
+    return (
+      <div className="page-container pick-page">
+        <h1>My Pick</h1>
+        <div className="card" style={{
+          padding: '32px',
+          textAlign: 'center',
+          borderColor: 'var(--color-danger)',
+        }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>❌</div>
+          <h2 style={{ color: 'var(--color-danger)', marginBottom: '8px' }}>Eliminated</h2>
+          <p style={{ color: 'var(--color-muted)' }}>
+            You've been knocked out of the Last Man Standing competition.
+          </p>
+        </div>
+        {myPicks.length > 0 && (
+          <div className="used-teams" style={{ marginTop: '32px' }}>
+            <h3>Your picks</h3>
+            <div className="used-list">
+              {myPicks.map(pick => (
+                <span key={pick.id} className={`used-tag used-tag--${pick.result ?? 'pending'}`}>
+                  {pick.team?.crest_url && (
+                    <img src={pick.team.crest_url} alt="" width={14} style={{ marginRight: 4, objectFit: 'contain' }} />
+                  )}
+                  {pick.team?.name ?? pick.team_id} (R{pick.round})
+                  {pick.result === 'win'  && ' ✅'}
+                  {pick.result === 'draw' && ' ❌'}
+                  {pick.result === 'loss' && ' ❌'}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   // No fixtures at all — no current round and no upcoming
   if (activeFixtures.length === 0 && myPicks.length === 0) {
     return (
@@ -180,17 +218,10 @@ function PickPage() {
       {/* Fixture selector */}
       {(!existingPick || changingPick) && (
         <div>
-          {isEliminated ? (
-            <div className="msg-info" style={{ marginBottom: '20px' }}>
-              ⚽ You've been eliminated but you can still pick for fun —
-              your pick won't affect the competition.
-            </div>
-          ) : (
-            <div className="msg-info" style={{ marginBottom: '20px' }}>
-              🔒 Your pick will be hidden from other players until 1 hour before kickoff.
-              Click a team to select them.
-            </div>
-          )}
+          <div className="msg-info" style={{ marginBottom: '20px' }}>
+            🔒 Your pick will be hidden from other players until 1 hour before kickoff.
+            Click a team to select them.
+          </div>
 
           <FixtureGrid
             byDate={byDate}

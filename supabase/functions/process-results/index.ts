@@ -47,6 +47,21 @@ Deno.serve(async (_req) => {
       const unique = [...new Set(toEliminate)]
       await sql`UPDATE players SET is_active = false WHERE id = ANY(${unique})`
       console.log(`Eliminated ${unique.length} players`)
+
+      // Remove any pre-emptive future picks submitted by eliminated players
+      // (picks for rounds whose fixtures haven't finished yet)
+      const deleted = await sql`
+        DELETE FROM picks p
+        USING fixtures f
+        WHERE p.fixture_id = f.id
+          AND p.player_id = ANY(${unique})
+          AND p.result IS NULL
+          AND f.status NOT IN ('FINISHED', 'IN_PLAY', 'PAUSED')
+        RETURNING p.id
+      `
+      if (deleted.length > 0) {
+        console.log(`Removed ${deleted.length} future picks from eliminated players`)
+      }
     }
 
     await sql.end()
