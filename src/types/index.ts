@@ -67,6 +67,29 @@ export type StandingRow = {
   team?: Team  // joined
 }
 
+// A single LMS game (one run of Last Man Standing)
+export type Game = {
+  id: string
+  status: 'active' | 'won' | 'all_out'
+  buy_in: number
+  carried_over: number
+  starting_round: number
+  winner_id: string | null
+  created_at: string
+  ended_at: string | null
+  winner?: Player
+}
+
+// A player's entry in a specific game
+export type GamePlayer = {
+  id: string
+  game_id: string
+  player_id: string
+  paid: boolean
+  joined_at: string
+  player?: Player
+}
+
 // One of your friends playing the game
 export type Player = {
   id: string        // matches their Supabase auth user ID

@@ -7,12 +7,15 @@ import { supabase } from './supabase'
 import type {
   Fixture,
   FixtureStage,
+  Game,
+  GamePlayer,
   Player,
   Pick,
   StandingRow,
 } from '../types'
 
 // ── Query Keys ────────────────────────────────────────────────
+// (exported so mutations can invalidate the right keys)
 // These strings identify each piece of cached data.
 // Invalidating a key tells Query to refetch that data.
 // Using a central object means no typos causing cache misses.
@@ -21,8 +24,10 @@ export const KEYS = {
   groups:      ['groups'] as const,
   players:     ['players'] as const,
   picks:       (round?: number) => round !== undefined ? ['picks', round] : ['picks'],
-  myPicks:     ['myPicks'] as const,
+  myPicks:     (gameId?: string) => gameId ? ['myPicks', gameId] : ['myPicks'],
   currentUser: ['currentUser'] as const,
+  currentGame: ['currentGame'] as const,
+  gamePlayers: (gameId?: string) => gameId ? ['gamePlayers', gameId] : ['gamePlayers'],
 }
 
 // ── Current user ──────────────────────────────────────────────
@@ -153,21 +158,80 @@ export function usePicks(round?: number) {
   })
 }
 
-// ── Current user's own picks ──────────────────────────────────
-// Used on the pick page to show which teams have already been used
-export function useMyPicks() {
+// ── Current active game ───────────────────────────────────────
+export function useCurrentGame() {
   return useQuery({
-    queryKey: KEYS.myPicks,
+    queryKey: KEYS.currentGame,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('games')
+        .select('*, winner:players(*)')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (error) throw new Error(`Failed to fetch current game: ${error.message}`)
+      return data as Game | null
+    },
+    staleTime: 1000 * 30,
+    refetchInterval: 1000 * 60,
+  })
+}
+
+// ── All games (for admin) ─────────────────────────────────────
+export function useGames() {
+  return useQuery({
+    queryKey: ['games'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('games')
+        .select('*, winner:players(*)')
+        .order('created_at', { ascending: false })
+
+      if (error) throw new Error(`Failed to fetch games: ${error.message}`)
+      return data as Game[]
+    },
+  })
+}
+
+// ── Players in a specific game ────────────────────────────────
+export function useGamePlayers(gameId: string | undefined) {
+  return useQuery({
+    queryKey: KEYS.gamePlayers(gameId),
+    queryFn: async () => {
+      if (!gameId) return []
+      const { data, error } = await supabase
+        .from('game_players')
+        .select('*, player:players(*)')
+        .eq('game_id', gameId)
+        .order('joined_at', { ascending: true })
+
+      if (error) throw new Error(`Failed to fetch game players: ${error.message}`)
+      return data as GamePlayer[]
+    },
+    enabled: !!gameId,
+  })
+}
+
+// ── Current user's own picks ──────────────────────────────────
+// Filtered by game_id so picks from old games don't bleed through
+export function useMyPicks(gameId?: string) {
+  return useQuery({
+    queryKey: KEYS.myPicks(gameId),
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return []
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('picks')
         .select('*, team:teams(*), fixture:fixtures(*)')
         .eq('player_id', user.id)
         .order('round', { ascending: true })
 
+      if (gameId) query = query.eq('game_id', gameId)
+
+      const { data, error } = await query
       if (error) throw new Error(`Failed to fetch my picks: ${error.message}`)
       return data as Pick[]
     },
@@ -187,10 +251,12 @@ export function useSubmitPick() {
       fixtureId,
       teamId,
       round,
+      gameId,
     }: {
       fixtureId: string
       teamId: string
       round: number
+      gameId: string
     }) => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('You must be logged in to make a pick')
@@ -203,18 +269,18 @@ export function useSubmitPick() {
             fixture_id: fixtureId,
             team_id:    teamId,
             round,
+            game_id:    gameId,
             revealed:   false,
           },
-          { onConflict: 'player_id,round' }
+          { onConflict: 'player_id,round,game_id' }
         )
         .select()
 
       if (error) throw new Error(`Failed to save pick: ${error.message}`)
       return data
     },
-    // After a successful pick, refresh the picks cache so the UI updates
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: KEYS.myPicks })
+      queryClient.invalidateQueries({ queryKey: KEYS.myPicks(variables.gameId) })
       queryClient.invalidateQueries({ queryKey: KEYS.picks(variables.round) })
     },
   })

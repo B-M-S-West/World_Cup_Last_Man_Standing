@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { useCurrentUser } from '../lib/queries'
 import type { User } from '@supabase/supabase-js'
 
 export const Route = createRootRoute({
@@ -18,6 +19,8 @@ function RootLayout() {
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
   const router = useRouter()
+  const { data: currentUser } = useCurrentUser()
+  const isAdmin = currentUser?.player?.is_admin === true
 
   useEffect(() => {
     // Check if there's already a session when the app loads
@@ -64,6 +67,9 @@ function RootLayout() {
               <Link to="/bracket"  activeProps={{ className: 'active' }}>Bracket</Link>
               <Link to="/lms"      activeProps={{ className: 'active' }}>LMS</Link>
               <Link to="/pick"     activeProps={{ className: 'active' }}>My Pick</Link>
+              {isAdmin && (
+                <Link to="/admin" activeProps={{ className: 'active' }}>Admin</Link>
+              )}
               <button className="btn-logout" onClick={handleLogout}>Sign Out</button>
             </nav>
           </div>

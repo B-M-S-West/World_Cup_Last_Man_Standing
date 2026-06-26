@@ -1,7 +1,7 @@
 import { createFileRoute, redirect, Link } from '@tanstack/react-router'
 import { format } from 'date-fns'
 import { supabase } from '../lib/supabase'
-import { useFixtures, usePlayers, useMyPicks } from '../lib/queries'
+import { useFixtures, usePlayers, useMyPicks, useCurrentGame, useGamePlayers } from '../lib/queries'
 import { STAGE_LABELS } from '../types'
 
 export const Route = createFileRoute('/')({
@@ -13,9 +13,16 @@ export const Route = createFileRoute('/')({
 })
 
 function HomePage() {
-  const { data: fixtures = [] } = useFixtures()
-  const { data: players = [] } = usePlayers()
-  const { data: myPicks = [] } = useMyPicks()
+  const { data: fixtures = [] }   = useFixtures()
+  const { data: players = [] }    = usePlayers()
+  const { data: currentGame }     = useCurrentGame()
+  const { data: gamePlayers = [] } = useGamePlayers(currentGame?.id)
+  const { data: myPicks = [] }    = useMyPicks(currentGame?.id)
+
+  const paidCount = gamePlayers.filter(gp => gp.paid).length
+  const prizePot  = currentGame
+    ? currentGame.carried_over + paidCount * currentGame.buy_in
+    : 0
 
   // Next 3 upcoming matches
   const upcomingFixtures = fixtures
@@ -37,6 +44,28 @@ function HomePage() {
   return (
     <div className="page-container">
       <h1>Dashboard</h1>
+
+      {/* Prize pot banner */}
+      {prizePot > 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 16,
+          padding: '16px 24px',
+          marginBottom: 28,
+          background: 'rgba(35,134,54,0.12)',
+          border: '1px solid var(--color-accent)',
+          borderRadius: 'var(--radius-md)',
+        }}>
+          <span style={{ fontSize: '1.6rem' }}>🏆</span>
+          <div>
+            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--color-accent)' }}>
+              £{prizePot.toFixed(2)}
+            </div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--color-muted)' }}>Current Prize Pot</div>
+          </div>
+        </div>
+      )}
 
       {/* Summary stats */}
       <div className="dashboard-grid">

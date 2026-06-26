@@ -6,6 +6,19 @@ Deno.serve(async (_req) => {
   console.log('process-results: running at', new Date().toISOString())
 
   try {
+    // Only process picks for the current active game
+    const activeGame = await sql`
+      SELECT id FROM games WHERE status = 'active' ORDER BY created_at DESC LIMIT 1
+    `
+
+    if (activeGame.length === 0) {
+      console.log('No active game — nothing to process')
+      await sql.end()
+      return new Response('No active game', { status: 200 })
+    }
+
+    const gameId = activeGame[0].id
+
     // Find picks with no result attached to finished fixtures
     const pendingPicks = await sql`
       SELECT p.id, p.player_id, p.team_id,
@@ -13,6 +26,7 @@ Deno.serve(async (_req) => {
       FROM picks p
       JOIN fixtures f ON f.id = p.fixture_id
       WHERE p.result IS NULL
+        AND p.game_id = ${gameId}
         AND f.status = 'FINISHED'
         AND f.home_score IS NOT NULL
         AND f.away_score IS NOT NULL
@@ -49,18 +63,52 @@ Deno.serve(async (_req) => {
       console.log(`Eliminated ${unique.length} players`)
 
       // Remove any pre-emptive future picks submitted by eliminated players
-      // (picks for rounds whose fixtures haven't finished yet)
       const deleted = await sql`
         DELETE FROM picks p
         USING fixtures f
         WHERE p.fixture_id = f.id
           AND p.player_id = ANY(${unique})
+          AND p.game_id = ${gameId}
           AND p.result IS NULL
           AND f.status NOT IN ('FINISHED', 'IN_PLAY', 'PAUSED')
         RETURNING p.id
       `
       if (deleted.length > 0) {
         console.log(`Removed ${deleted.length} future picks from eliminated players`)
+      }
+    }
+
+    // ── Auto-detect game end ──────────────────────────────────
+    // Only declare end if there are no more pending picks in this game
+    // (some fixtures in this round may still be in progress)
+    const stillPending = await sql`
+      SELECT p.id FROM picks p
+      JOIN fixtures f ON f.id = p.fixture_id
+      WHERE p.game_id = ${gameId}
+        AND p.result IS NULL
+        AND f.status NOT IN ('FINISHED', 'CANCELLED', 'AWARDED')
+    `
+
+    if (stillPending.length === 0) {
+      const activeInGame = await sql`
+        SELECT p.id FROM players p
+        JOIN game_players gp ON gp.player_id = p.id AND gp.game_id = ${gameId}
+        WHERE p.is_active = true
+      `
+
+      if (activeInGame.length === 1) {
+        const winnerId = activeInGame[0].id
+        await sql`
+          UPDATE games SET status = 'won', winner_id = ${winnerId}, ended_at = now()
+          WHERE id = ${gameId}
+        `
+        console.log(`Game ${gameId} won by player ${winnerId}`)
+      } else if (activeInGame.length === 0) {
+        await sql`
+          UPDATE games SET status = 'all_out', ended_at = now()
+          WHERE id = ${gameId}
+        `
+        console.log(`Game ${gameId} ended — all players out`)
       }
     }
 

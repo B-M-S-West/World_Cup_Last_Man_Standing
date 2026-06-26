@@ -2,7 +2,7 @@ import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
 import { format } from 'date-fns'
 import { supabase } from '../lib/supabase'
-import { useMyPicks, useSubmitPick, useFixtures, useCurrentUser } from '../lib/queries'
+import { useMyPicks, useSubmitPick, useFixtures, useCurrentUser, useCurrentGame } from '../lib/queries'
 import { STAGE_LABELS, STAGE_TO_ROUND, type Fixture, type Pick } from '../types'
 
 export const Route = createFileRoute('/pick')({
@@ -40,7 +40,8 @@ function getFixturesForRound(fixtures: Fixture[], round: number): Fixture[] {
 }
 
 function PickPage() {
-  const { data: myPicks = [],  isLoading: picksLoading   } = useMyPicks()
+  const { data: currentGame } = useCurrentGame()
+  const { data: myPicks = [],  isLoading: picksLoading   } = useMyPicks(currentGame?.id)
   const { data: fixtures = [], isLoading: fixturesLoading } = useFixtures()
   const { data: currentUser } = useCurrentUser()
   const submitPick = useSubmitPick()
@@ -48,12 +49,17 @@ function PickPage() {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
   const [changingPick, setChangingPick] = useState(false)
 
-  const highestPickedRound = myPicks.length > 0 ? Math.max(...myPicks.map(p => p.round)) : 0
-  const lastPick = myPicks.find(p => p.round === highestPickedRound) ?? null
+  const highestPickedRound  = myPicks.length > 0 ? Math.max(...myPicks.map(p => p.round)) : 0
+  const lastPick            = myPicks.find(p => p.round === highestPickedRound) ?? null
+  const gameStartingRound   = currentGame?.starting_round ?? 1
 
-  // If the last pick is revealed (or there's no pick yet), user can pick the next round.
-  // Otherwise they can only edit the current (unrevealed) round.
-  const activeRound = (lastPick && !lastPick.revealed) ? highestPickedRound : highestPickedRound + 1
+  // Unlock the next round as soon as the last pick is revealed.
+  // Never go below the game's starting round (for games that start from R32 etc.)
+  const activeRound = myPicks.length === 0
+    ? gameStartingRound
+    : (lastPick && !lastPick.revealed)
+      ? highestPickedRound
+      : Math.max(highestPickedRound + 1, gameStartingRound)
   const previewRound = activeRound + 1
 
   const activeFixtures = getFixturesForRound(fixtures, activeRound)
@@ -82,13 +88,14 @@ function PickPage() {
     ) ?? null
 
   const handleSubmit = async () => {
-    if (!selectedTeamId) return
+    if (!selectedTeamId || !currentGame) return
     const fixture = getFixtureForTeam(selectedTeamId)
     if (!fixture) return
     await submitPick.mutateAsync({
       fixtureId: fixture.id,
       teamId:    selectedTeamId,
       round:     activeRound,
+      gameId:    currentGame.id,
     })
     setChangingPick(false)
     setSelectedTeamId(null)
