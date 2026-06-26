@@ -163,6 +163,9 @@ export function useCurrentGame() {
   return useQuery({
     queryKey: KEYS.currentGame,
     queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return null
+
       const { data, error } = await supabase
         .from('games')
         .select('*, winner:players(*)')
