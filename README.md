@@ -2,8 +2,6 @@
 
 A full-stack **Last Man Standing** prediction game built for the FIFA World Cup 2026. Players pick one team to win each round — if your team draws or loses, you're eliminated. Last player standing wins the prize pot.
 
-Live at: [world-cup-last-man-standing.pages.dev](https://world-cup-last-man-standing.pages.dev)
-
 ---
 
 ## What is Last Man Standing?
