@@ -75,6 +75,8 @@ Deno.serve(async (_req) => {
           ${m.awayTeam.tla ? null : (m.awayTeam.name ?? null)}
         )
         ON CONFLICT (api_id) DO UPDATE SET
+          home_team_id = EXCLUDED.home_team_id,
+          away_team_id = EXCLUDED.away_team_id,
           home_score   = EXCLUDED.home_score,
           away_score   = EXCLUDED.away_score,
           status       = EXCLUDED.status,
