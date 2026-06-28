@@ -78,6 +78,8 @@ export type Game = {
   winner_id: string | null
   created_at: string
   ended_at: string | null
+  // Joined field — present when queried with winner:players(username)
+  winner?: { username: string } | null
 }
 
 // A player's entry in a specific game
@@ -130,14 +132,24 @@ export const STAGE_TO_ROUND: Record<string, number> = {
 
 // Human-readable labels for display in the UI
 export const STAGE_LABELS: Record<string, string> = {
-  GROUP_STAGE:     'Group Stage',
-  LAST_32:    'Last 32',
-  LAST_16:    'Last 16', 
-  ROUND_OF_16:    'Round of 16',
-  QUARTER_FINALS:  'Quarter-Finals',
+  GROUP_STAGE:    'Group Stage',
+  LAST_32:        'Last 32',
+  LAST_16:        'Last 16',
+  QUARTER_FINALS: 'Quarter-Finals',
   SEMI_FINALS:    'Semi-Finals',
   THIRD_PLACE:    'Third Place Play-off',
   FINAL:          'Final',
+}
+
+// Maps LMS round numbers to display labels.
+// Defined explicitly to avoid collision (SEMI_FINALS and THIRD_PLACE both map to round 5).
+export const ROUND_LABELS: Record<number, string> = {
+  1: 'Group Stage',
+  2: 'Last 32',
+  3: 'Last 16',
+  4: 'Quarter-Finals',
+  5: 'Semi-Finals',
+  6: 'Final',
 }
 
 // Ordered list used for filter buttons on the fixtures page

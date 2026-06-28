@@ -1,13 +1,8 @@
-import { createFileRoute, redirect } from '@tanstack/react-router'
-import { supabase } from '../lib/supabase'
+import { createFileRoute } from '@tanstack/react-router'
 import { useGroups } from '../lib/queries'
 import type { StandingRow } from '../types'
 
 export const Route = createFileRoute('/groups')({
-  beforeLoad: async () => {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) throw redirect({ to: '/login' })
-  },
   component: GroupsPage,
 })
 

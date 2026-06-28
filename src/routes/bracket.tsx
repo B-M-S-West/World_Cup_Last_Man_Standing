@@ -1,14 +1,9 @@
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { format } from 'date-fns'
-import { supabase } from '../lib/supabase'
 import { useFixtures } from '../lib/queries'
 import { type Fixture } from '../types'
 
 export const Route = createFileRoute('/bracket')({
-  beforeLoad: async () => {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) throw redirect({ to: '/login' })
-  },
   component: BracketPage,
 })
 

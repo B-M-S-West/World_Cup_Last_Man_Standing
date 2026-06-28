@@ -27,6 +27,7 @@ export const KEYS = {
   myPicks:     (gameId?: string) => gameId ? ['myPicks', gameId] : ['myPicks'],
   currentUser: ['currentUser'] as const,
   currentGame: ['currentGame'] as const,
+  games:       ['games'] as const,
   gamePlayers: (gameId?: string) => gameId ? ['gamePlayers', gameId] : ['gamePlayers'],
 }
 
@@ -188,11 +189,11 @@ export function useCurrentGame() {
 // ── All games (for admin) ─────────────────────────────────────
 export function useGames() {
   return useQuery({
-    queryKey: ['games'],
+    queryKey: KEYS.games,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('games')
-        .select('*')
+        .select('*, winner:players!games_winner_id_fkey(username)')
         .order('created_at', { ascending: false })
 
       if (error) throw new Error(`Failed to fetch games: ${error.message}`)

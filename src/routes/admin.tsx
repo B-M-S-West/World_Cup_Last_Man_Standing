@@ -1,6 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+
 import {
   useCurrentGame,
   useGames,
@@ -8,19 +9,17 @@ import {
   usePlayers,
   KEYS,
 } from '../lib/queries'
+import { STAGE_LABELS, STAGE_TO_ROUND, ROUND_LABELS } from '../types'
 import { useQueryClient, useMutation } from '@tanstack/react-query'
-import type { Game, GamePlayer, Player } from '../types'
-import { STAGE_LABELS, STAGE_TO_ROUND } from '../types'
+import type { Game, Player } from '../types'
 
 export const Route = createFileRoute('/admin')({
   beforeLoad: async () => {
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session) throw redirect({ to: '/login' })
-
     const { data: player } = await supabase
       .from('players')
       .select('is_admin')
-      .eq('id', session.user.id)
+      .eq('id', session!.user.id)
       .single()
 
     if (!player?.is_admin) throw redirect({ to: '/' })
@@ -28,10 +27,6 @@ export const Route = createFileRoute('/admin')({
   component: AdminPage,
 })
 
-// ── Round label helper ────────────────────────────────────────
-const ROUND_LABELS: Record<number, string> = Object.fromEntries(
-  Object.entries(STAGE_TO_ROUND).map(([stage, round]) => [round, STAGE_LABELS[stage] ?? stage])
-)
 
 function AdminPage() {
   const queryClient   = useQueryClient()
@@ -193,7 +188,8 @@ function AdminPage() {
             setShowNewGame(false)
             queryClient.invalidateQueries({ queryKey: KEYS.currentGame })
             queryClient.invalidateQueries({ queryKey: KEYS.players })
-            queryClient.invalidateQueries({ queryKey: ['games'] })
+            queryClient.invalidateQueries({ queryKey: KEYS.games })
+            queryClient.invalidateQueries({ queryKey: KEYS.gamePlayers(undefined) })
           }}
         />
       )}
@@ -279,7 +275,7 @@ function AdminPage() {
                   <td style={tdStyle}>{new Date(g.created_at).toLocaleDateString('en-GB')}</td>
                   <td style={tdStyle}><StatusBadge status={g.status} /></td>
                   <td style={tdStyle}>£{g.buy_in.toFixed(2)}</td>
-                  <td style={tdStyle}>{g.winner_id ?? '—'}</td>
+                  <td style={tdStyle}>{g.winner?.username ?? '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -304,8 +300,6 @@ function NewGamePanel({
   onClose: () => void
   onSuccess: () => void
 }) {
-  const queryClient = useQueryClient()
-
   const previousPot = previousGame
     ? previousGame.carried_over + previousPaidCount * previousGame.buy_in
     : 0
@@ -361,10 +355,7 @@ function NewGamePanel({
         if (activeErr) throw new Error(activeErr.message)
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: KEYS.players })
-      onSuccess()
-    },
+    onSuccess: () => onSuccess(),
     onError: (err: Error) => setError(err.message),
   })
 
@@ -469,36 +460,31 @@ function NewGamePanel({
 function AddPlayerForm({ gameId }: { gameId?: string }) {
   const [username, setUsername] = useState('')
   const [email, setEmail]       = useState('')
-  const [result, setResult]     = useState<{ tempPassword: string; username: string } | null>(null)
-  const [error, setError]       = useState<string | null>(null)
-  const [loading, setLoading]   = useState(false)
   const queryClient             = useQueryClient()
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const createPlayer = useMutation({
+    mutationFn: async ({ username, email }: { username: string; email: string }) => {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await supabase.functions.invoke('admin-create-player', {
+        body: { username, email, gameId },
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      })
+      if (res.error || res.data?.error) {
+        throw new Error(res.data?.error ?? res.error?.message ?? 'Failed to create player')
+      }
+      return res.data as { tempPassword: string; username: string }
+    },
+    onSuccess: () => {
+      setUsername('')
+      setEmail('')
+      queryClient.invalidateQueries({ queryKey: KEYS.players })
+      queryClient.invalidateQueries({ queryKey: KEYS.gamePlayers(gameId) })
+    },
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    setError(null)
-    setResult(null)
-    setLoading(true)
-
-    const { data: { session } } = await supabase.auth.getSession()
-
-    const res = await supabase.functions.invoke('admin-create-player', {
-      body: { username: username.trim(), email: email.trim(), gameId },
-      headers: { Authorization: `Bearer ${session?.access_token}` },
-    })
-
-    setLoading(false)
-
-    if (res.error || res.data?.error) {
-      setError(res.data?.error ?? res.error?.message ?? 'Failed to create player')
-      return
-    }
-
-    setResult({ tempPassword: res.data.tempPassword, username: res.data.username })
-    setUsername('')
-    setEmail('')
-    queryClient.invalidateQueries({ queryKey: KEYS.players })
-    queryClient.invalidateQueries({ queryKey: KEYS.gamePlayers(gameId) })
+    createPlayer.mutate({ username: username.trim(), email: email.trim() })
   }
 
   return (
@@ -525,17 +511,21 @@ function AddPlayerForm({ gameId }: { gameId?: string }) {
           placeholder="charlie@example.com"
         />
       </label>
-      <button className="btn btn-primary" type="submit" disabled={loading} style={{ alignSelf: 'flex-start' }}>
-        {loading ? 'Creating...' : 'Add Player'}
+      <button className="btn btn-primary" type="submit" disabled={createPlayer.isPending} style={{ alignSelf: 'flex-start' }}>
+        {createPlayer.isPending ? 'Creating...' : 'Add Player'}
       </button>
 
-      {error && <p style={{ color: 'var(--color-danger)', fontSize: '0.875rem' }}>{error}</p>}
+      {createPlayer.isError && (
+        <p style={{ color: 'var(--color-danger)', fontSize: '0.875rem' }}>
+          {(createPlayer.error as Error).message}
+        </p>
+      )}
 
-      {result && (
+      {createPlayer.isSuccess && createPlayer.data && (
         <div style={{ padding: '12px 16px', background: 'rgba(35,134,54,0.1)', borderRadius: 8, border: '1px solid var(--color-accent)' }}>
-          <strong>{result.username}</strong> created. Share these login details:
+          <strong>{createPlayer.data.username}</strong> created. Share these login details:
           <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: '0.85rem', background: 'var(--color-surface)', padding: '8px 12px', borderRadius: 6 }}>
-            Temp password: <strong>{result.tempPassword}</strong>
+            Temp password: <strong>{createPlayer.data.tempPassword}</strong>
           </div>
           <p style={{ fontSize: '0.78rem', color: 'var(--color-muted)', marginTop: 6 }}>
             They can change this after logging in.

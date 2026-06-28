@@ -1,14 +1,9 @@
-import { createFileRoute, redirect, Link } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { format } from 'date-fns'
-import { supabase } from '../lib/supabase'
 import { useFixtures, usePlayers, useMyPicks, useCurrentGame } from '../lib/queries'
 import { STAGE_LABELS } from '../types'
 
 export const Route = createFileRoute('/')({
-  beforeLoad: async () => {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) throw redirect({ to: '/login' })
-  },
   component: HomePage,
 })
 

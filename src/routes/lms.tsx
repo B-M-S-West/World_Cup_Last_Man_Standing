@@ -1,13 +1,8 @@
-import { createFileRoute, redirect } from '@tanstack/react-router'
-import { supabase } from '../lib/supabase'
+import { createFileRoute } from '@tanstack/react-router'
 import { usePlayers, usePicks } from '../lib/queries'
 import type { Player, Pick } from '../types'
 
 export const Route = createFileRoute('/lms')({
-  beforeLoad: async () => {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) throw redirect({ to: '/login' })
-  },
   component: LMSPage,
 })
 
@@ -53,11 +48,7 @@ function LMSPage() {
         )}
         <div className="player-grid">
           {active.map(player => (
-            <PlayerCard
-              key={player.id}
-              player={player}
-              picks={picksFor(player.id)}
-            />
+            <PlayerCard key={player.id} player={player} picks={picksFor(player.id)} />
           ))}
         </div>
       </section>
@@ -67,12 +58,7 @@ function LMSPage() {
           <h2>❌ Eliminated</h2>
           <div className="player-grid">
             {eliminated.map(player => (
-              <PlayerCard
-                key={player.id}
-                player={player}
-                picks={picksFor(player.id)}
-                isEliminated
-              />
+              <PlayerCard key={player.id} player={player} picks={picksFor(player.id)} />
             ))}
           </div>
         </section>
@@ -81,15 +67,8 @@ function LMSPage() {
   )
 }
 
-function PlayerCard({
-  player,
-  picks,
-  isEliminated = false,
-}: {
-  player: Player
-  picks: Pick[]
-  isEliminated?: boolean
-}) {
+function PlayerCard({ player, picks }: { player: Player; picks: Pick[] }) {
+  const isEliminated = !player.is_active
   return (
     <div className={`player-card ${isEliminated ? 'player-card--out' : ''}`}>
       <h3>{isEliminated ? '❌ ' : '🟢 '}{player.username}</h3>

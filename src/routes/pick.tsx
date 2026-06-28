@@ -1,20 +1,28 @@
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
 import { format } from 'date-fns'
-import { supabase } from '../lib/supabase'
 import { useMyPicks, useSubmitPick, useFixtures, useCurrentUser, useCurrentGame } from '../lib/queries'
-import { STAGE_LABELS, STAGE_TO_ROUND, type Fixture, type Pick } from '../types'
+import { ROUND_LABELS, STAGE_TO_ROUND, type Fixture, type Pick } from '../types'
 
 export const Route = createFileRoute('/pick')({
-  beforeLoad: async () => {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) throw redirect({ to: '/login' })
-  },
   component: PickPage,
 })
 
-// Group stage rounds 1-3 map to matchdays. Round 4+ are knockout stages.
 const GROUP_STAGE_ROUNDS = 3
+
+function groupByDate(fixtures: Fixture[]): Record<string, Fixture[]> {
+  const result: Record<string, Fixture[]> = {}
+  for (const f of fixtures) {
+    const date = f.kickoff_time.slice(0, 10)
+    if (!result[date]) result[date] = []
+    result[date].push(f)
+  }
+  return result
+}
+
+function getRoundLabel(round: number): string {
+  return ROUND_LABELS[round] ?? `Round ${round}`
+}
 
 function getFixturesForRound(fixtures: Fixture[], round: number): Fixture[] {
   if (round <= GROUP_STAGE_ROUNDS) {
@@ -155,29 +163,10 @@ function PickPage() {
     )
   }
 
-  // Group fixtures by date for display
-  const byDate: Record<string, Fixture[]> = {}
-  for (const f of activeFixtures) {
-    const date = f.kickoff_time.slice(0, 10)
-    if (!byDate[date]) byDate[date] = []
-    byDate[date].push(f)
-  }
-
-  const byDatePreview: Record<string, Fixture[]> = {}
-  for (const f of previewFixtures) {
-    const date = f.kickoff_time.slice(0, 10)
-    if (!byDatePreview[date]) byDatePreview[date] = []
-    byDatePreview[date].push(f)
-  }
-
-  // Determine the stage label for active round
-  const activeStageLabel = activeRound <= GROUP_STAGE_ROUNDS
-    ? STAGE_LABELS['GROUP_STAGE']
-    : (Object.entries(STAGE_TO_ROUND).find(([, r]) => r === activeRound)?.[0] ?? '')
-
-  const previewStageLabel = previewRound <= GROUP_STAGE_ROUNDS
-    ? STAGE_LABELS['GROUP_STAGE']
-    : (Object.entries(STAGE_TO_ROUND).find(([, r]) => r === previewRound)?.[0] ?? '')
+  const byDate = groupByDate(activeFixtures)
+  const byDatePreview = groupByDate(previewFixtures)
+  const activeStageLabel = getRoundLabel(activeRound)
+  const previewStageLabel = getRoundLabel(previewRound)
 
   // If no active fixtures but we have a previous pick, show it with next round TBA
   if (activeFixtures.length === 0) {
