@@ -1,7 +1,7 @@
 import { createFileRoute, redirect, Link } from '@tanstack/react-router'
 import { format } from 'date-fns'
 import { supabase } from '../lib/supabase'
-import { useFixtures, usePlayers, useMyPicks, useCurrentGame, useGamePlayers } from '../lib/queries'
+import { useFixtures, usePlayers, useMyPicks, useCurrentGame } from '../lib/queries'
 import { STAGE_LABELS } from '../types'
 
 export const Route = createFileRoute('/')({
@@ -13,16 +13,12 @@ export const Route = createFileRoute('/')({
 })
 
 function HomePage() {
-  const { data: fixtures = [] }   = useFixtures()
-  const { data: players = [] }    = usePlayers()
-  const { data: currentGame }     = useCurrentGame()
-  const { data: gamePlayers = [] } = useGamePlayers(currentGame?.id)
-  const { data: myPicks = [] }    = useMyPicks(currentGame?.id)
+  const { data: fixtures = [] } = useFixtures()
+  const { data: players = [] }  = usePlayers()
+  const { data: currentGame }   = useCurrentGame()
+  const { data: myPicks = [] }  = useMyPicks(currentGame?.id)
 
-  const paidCount = gamePlayers.filter(gp => gp.paid).length
-  const prizePot  = currentGame
-    ? currentGame.carried_over + paidCount * currentGame.buy_in
-    : 0
+  const prizePot = currentGame?.prize_pot ?? 0
 
   // Next 3 upcoming matches
   const upcomingFixtures = fixtures

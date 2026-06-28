@@ -73,6 +73,7 @@ export type Game = {
   status: 'active' | 'won' | 'all_out'
   buy_in: number
   carried_over: number
+  prize_pot: number
   starting_round: number
   winner_id: string | null
   created_at: string

@@ -53,8 +53,18 @@ function AdminPage() {
     mutationFn: async ({ id, paid }: { id: string; paid: boolean }) => {
       const { error } = await supabase.from('game_players').update({ paid }).eq('id', id)
       if (error) throw new Error(error.message)
+
+      // Recompute and store prize_pot on the game
+      if (currentGame) {
+        const newPaidCount = gamePlayers.filter(gp => (gp.id === id ? paid : gp.paid)).length
+        const newPot = currentGame.carried_over + newPaidCount * currentGame.buy_in
+        await supabase.from('games').update({ prize_pot: newPot }).eq('id', currentGame.id)
+      }
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: KEYS.gamePlayers(currentGame?.id) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: KEYS.gamePlayers(currentGame?.id) })
+      queryClient.invalidateQueries({ queryKey: KEYS.currentGame })
+    },
   })
 
   const removeFromGame = useMutation({
@@ -311,7 +321,7 @@ function NewGamePanel({
       // 1. Create the game
       const { data: game, error: gameErr } = await supabase
         .from('games')
-        .insert({ buy_in: buyIn, carried_over: carriedOver, starting_round: startingRound, status: 'active' })
+        .insert({ buy_in: buyIn, carried_over: carriedOver, prize_pot: newPot, starting_round: startingRound, status: 'active' })
         .select()
         .single()
       if (gameErr) throw new Error(gameErr.message)
