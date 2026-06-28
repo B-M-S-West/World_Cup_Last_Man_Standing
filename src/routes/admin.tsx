@@ -35,7 +35,7 @@ const ROUND_LABELS: Record<number, string> = Object.fromEntries(
 
 function AdminPage() {
   const queryClient   = useQueryClient()
-  const { data: currentGame, isLoading: gameLoading } = useCurrentGame()
+  const { data: currentGame, isLoading: gameLoading, error: gameError } = useCurrentGame()
   const { data: allGames = [] } = useGames()
   const { data: gamePlayers = [] } = useGamePlayers(currentGame?.id)
   const { data: allPlayers = [] } = usePlayers()
@@ -95,6 +95,15 @@ function AdminPage() {
   })
 
   if (gameLoading) return <div className="loading">Loading admin panel...</div>
+  if (gameError) return (
+    <div className="page-container">
+      <h1>Admin Portal</h1>
+      <div style={{ padding: '16px', background: 'rgba(248,81,73,0.1)', border: '1px solid var(--color-danger)', borderRadius: 8, color: 'var(--color-danger)' }}>
+        <strong>Error loading game:</strong> {(gameError as Error).message}
+        <br /><small>Check Supabase RLS policies on the games table.</small>
+      </div>
+    </div>
+  )
 
   return (
     <div className="page-container" style={{ maxWidth: 800 }}>

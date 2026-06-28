@@ -163,8 +163,10 @@ export function useCurrentGame() {
   return useQuery({
     queryKey: KEYS.currentGame,
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return null
+      // Use getSession() (local storage) rather than getUser() (network round-trip)
+      // to avoid a race condition where getUser() fails and we silently return null.
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return null
 
       const { data, error } = await supabase
         .from('games')
@@ -179,6 +181,7 @@ export function useCurrentGame() {
     },
     staleTime: 1000 * 30,
     refetchInterval: 1000 * 60,
+    retry: 3,
   })
 }
 
