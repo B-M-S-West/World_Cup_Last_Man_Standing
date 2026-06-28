@@ -78,7 +78,6 @@ export type Game = {
   winner_id: string | null
   created_at: string
   ended_at: string | null
-  winner?: Player
 }
 
 // A player's entry in a specific game

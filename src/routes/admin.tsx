@@ -127,9 +127,9 @@ function AdminPage() {
               />
             </div>
 
-            {currentGame.status === 'won' && currentGame.winner && (
+            {currentGame.status === 'won' && currentGame.winner_id && (
               <div style={{ marginTop: 16, padding: '12px 16px', background: 'rgba(35,134,54,0.15)', borderRadius: 8, border: '1px solid var(--color-accent)' }}>
-                🏆 Winner: <strong>{currentGame.winner.username}</strong>
+                🏆 Winner: <strong>{gamePlayers.find(gp => gp.player_id === currentGame.winner_id)?.player?.username ?? 'Unknown'}</strong>
               </div>
             )}
 
@@ -270,7 +270,7 @@ function AdminPage() {
                   <td style={tdStyle}>{new Date(g.created_at).toLocaleDateString('en-GB')}</td>
                   <td style={tdStyle}><StatusBadge status={g.status} /></td>
                   <td style={tdStyle}>£{g.buy_in.toFixed(2)}</td>
-                  <td style={tdStyle}>{g.winner?.username ?? '—'}</td>
+                  <td style={tdStyle}>{g.winner_id ?? '—'}</td>
                 </tr>
               ))}
             </tbody>

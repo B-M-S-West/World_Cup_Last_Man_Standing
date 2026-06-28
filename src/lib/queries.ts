@@ -168,7 +168,7 @@ export function useCurrentGame() {
 
       const { data, error } = await supabase
         .from('games')
-        .select('*, winner:players(*)')
+        .select('*')
         .eq('status', 'active')
         .order('created_at', { ascending: false })
         .limit(1)
@@ -189,7 +189,7 @@ export function useGames() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('games')
-        .select('*, winner:players(*)')
+        .select('*')
         .order('created_at', { ascending: false })
 
       if (error) throw new Error(`Failed to fetch games: ${error.message}`)
